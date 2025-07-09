@@ -1,5 +1,4 @@
-
-import { GameState, Player, Card, RoundResult } from '@/types/game';
+import { GameState, Player, Card, RoundResult, GameDialogue } from '@/types/game';
 import { createDeck, dealCards } from './cards';
 import { MusBot } from './bots';
 
@@ -7,25 +6,45 @@ export class MusGameEngine {
   private state: GameState;
 
   constructor(players: Player[]) {
+    // Marcar al primer jugador como mano
+    players[0].isMano = true;
+    
     this.state = {
       phase: 'mus',
       subPhase: 'dealing',
       currentPlayer: players[0].id,
       currentRound: 1,
       currentBet: 0,
-      pot: 0,
       teamAScore: 0,
       teamBScore: 0,
       players,
       deck: createDeck(),
       musCount: 0,
       bets: {},
-      roundResults: []
+      roundResults: [],
+      dialogues: [],
+      senasEnabled: true
     };
   }
 
   getState(): GameState {
     return { ...this.state };
+  }
+
+  addDialogue(playerId: string, message: string, action: string): void {
+    const dialogue: GameDialogue = {
+      playerId,
+      message,
+      action,
+      timestamp: Date.now()
+    };
+    
+    this.state.dialogues.push(dialogue);
+    
+    // Mantener solo los últimos 10 diálogos
+    if (this.state.dialogues.length > 10) {
+      this.state.dialogues = this.state.dialogues.slice(-10);
+    }
   }
 
   dealNewRound(): void {
@@ -41,6 +60,7 @@ export class MusGameEngine {
     this.state.musCount = 0;
     this.state.bets = {};
     this.state.currentBet = 0;
+    this.state.dialogues = [];
     
     console.log('Nueva ronda iniciada. Manos repartidas.');
   }
@@ -48,7 +68,6 @@ export class MusGameEngine {
   processMusPhase(): boolean {
     console.log('Procesando fase de mus...');
     
-    // Si alguien dice "no mus", pasamos a la siguiente fase
     this.state.phase = 'grande';
     this.state.subPhase = 'betting';
     this.resetCurrentPlayer();
@@ -57,19 +76,19 @@ export class MusGameEngine {
     return true;
   }
 
-  processDiscards(): void {
-    // Los bots descartan automáticamente
-    this.state.players.forEach(player => {
-      if (player.isBot) {
-        const bot = new MusBot(player);
-        const discardIndices = bot.selectCardsToDiscard();
-        this.discardCards(player.id, discardIndices);
-      }
-    });
+  sendCompanionSignal(playerId: string, signal: 'buenas' | 'malas' | 'regulares'): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player || !this.state.senasEnabled) return;
 
-    // Volver a la decisión de mus
-    this.state.subPhase = 'mus-decision';
-    this.resetCurrentPlayer();
+    this.state.companionSignal = signal;
+    this.addDialogue(playerId, `*Hace señas: ${signal}*`, 'signal');
+    
+    // La señal dura solo unos segundos
+    setTimeout(() => {
+      if (this.state.companionSignal === signal) {
+        this.state.companionSignal = undefined;
+      }
+    }, 5000);
   }
 
   discardCards(playerId: string, cardIndices: number[]): void {
@@ -183,7 +202,6 @@ export class MusGameEngine {
   private finishRound(): void {
     console.log('Finalizando ronda...');
     
-    // Evaluar todas las rondas y sumar puntos
     const phases = ['grande', 'chica', 'pares', 'juego'];
     phases.forEach(phase => {
       const result = this.evaluateRound(phase);
@@ -198,8 +216,7 @@ export class MusGameEngine {
       console.log(`${phase}: Equipo ${result.winner} gana ${result.points} puntos`);
     });
 
-    // Verificar fin de juego
-    if (this.state.teamAScore >= 30 || this.state.teamBScore >= 30) {
+    if (this.state.teamAScore >= 40 || this.state.teamBScore >= 40) {
       this.state.phase = 'finished';
       console.log('¡Juego terminado!');
     } else {
@@ -217,27 +234,31 @@ export class MusGameEngine {
     try {
       if (this.state.subPhase === 'mus-decision') {
         const decision = bot.decideMus();
-        console.log(`${currentPlayer.name}: ${bot.getBotPhrase('mus')} - ${decision}`);
+        const phrase = bot.getBotPhrase('mus');
+        
+        this.addDialogue(currentPlayer.id, phrase, 'mus');
+        console.log(`${currentPlayer.name}: ${phrase} - ${decision}`);
         
         if (decision === 'no mus') {
           this.processMusPhase();
         } else {
-          // Si dice mus, continuar con el siguiente jugador
           this.nextPlayer();
         }
       } else if (this.state.subPhase === 'betting') {
         const bet = bot.decideBet(this.state.phase);
-        console.log(`${currentPlayer.name}: ${bot.getBotPhrase('bet')} - ${bet}`);
+        const phrase = bot.getBotPhrase('bet');
+        
+        this.addDialogue(currentPlayer.id, phrase, 'bet');
+        console.log(`${currentPlayer.name}: ${phrase} - ${bet}`);
         
         this.state.bets[currentPlayer.id] = bet;
         
         if (bet === 'ordago') {
-          this.state.currentBet = 30; // Órdago
+          this.state.currentBet = 40;
         } else if (bet === 'envido') {
           this.state.currentBet += 2;
         }
         
-        // Verificar si todos han apostado
         const allBets = Object.keys(this.state.bets).length;
         if (allBets >= this.state.players.length) {
           this.nextPhase();
@@ -247,7 +268,7 @@ export class MusGameEngine {
       }
     } catch (error) {
       console.error('Error procesando acción del bot:', error);
-      this.nextPlayer(); // Continuar si hay error
+      this.nextPlayer();
     }
   }
 
@@ -260,7 +281,7 @@ export class MusGameEngine {
   }
 
   private resetCurrentPlayer(): void {
-    // Empezar siempre por el primer jugador (mano)
-    this.state.currentPlayer = this.state.players[0].id;
+    const manoPlayer = this.state.players.find(p => p.isMano);
+    this.state.currentPlayer = manoPlayer?.id || this.state.players[0].id;
   }
 }

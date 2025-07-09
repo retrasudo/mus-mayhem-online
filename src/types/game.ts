@@ -15,6 +15,7 @@ export interface Player {
   position: 'bottom' | 'left' | 'top' | 'right';
   hand: Card[];
   stats?: BotStats;
+  isMano?: boolean; // Indica si es mano (el que empieza)
 }
 
 export interface BotStats {
@@ -29,13 +30,19 @@ export interface BotStats {
   juegaChica: number;
 }
 
+export interface GameDialogue {
+  playerId: string;
+  message: string;
+  action: string;
+  timestamp: number;
+}
+
 export interface GameState {
   phase: 'mus' | 'grande' | 'chica' | 'pares' | 'juego' | 'finished';
   subPhase: 'dealing' | 'mus-decision' | 'discarding' | 'betting' | 'revealing' | 'scoring';
   currentPlayer: string;
   currentRound: number;
   currentBet: number;
-  pot: number;
   teamAScore: number;
   teamBScore: number;
   players: Player[];
@@ -43,6 +50,9 @@ export interface GameState {
   musCount: number;
   bets: Record<string, 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero'>;
   roundResults: RoundResult[];
+  dialogues: GameDialogue[];
+  senasEnabled: boolean;
+  companionSignal?: 'buenas' | 'malas' | 'regulares';
 }
 
 export interface RoundResult {
@@ -57,5 +67,6 @@ export type GameAction =
   | { type: 'MUS_DECISION'; playerId: string; decision: 'mus' | 'no mus' }
   | { type: 'DISCARD_CARDS'; playerId: string; cardIndices: number[] }
   | { type: 'PLACE_BET'; playerId: string; bet: 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero' }
+  | { type: 'SEND_SIGNAL'; playerId: string; signal: 'buenas' | 'malas' | 'regulares' }
   | { type: 'NEXT_PHASE' }
   | { type: 'RESET_GAME' };
