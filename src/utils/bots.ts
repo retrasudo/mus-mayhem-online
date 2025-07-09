@@ -106,7 +106,7 @@ export const BOT_STATS: Record<string, BotStats> = {
 export const BOT_CHARACTERS = [
   { id: 'chigga', name: 'Chigga', avatar: '🐵', phrase: '"Unga unga mus"' },
   { id: 'xose', name: 'Xosé Roberto', avatar: '🧓🏻', phrase: '"¡Caldereta pura!"' },
-  { id: 'zaray', name: 'La Zaray', avatar: '💅', phrase: '"Yo gano siempre"' },
+  { id: 'zaray', name: 'La Zaray', avatar: '🧙‍♀️', phrase: '"Yo gano siempre"' },
   { id: 'pato', name: 'Pato', avatar: '🦆', phrase: '"Quack quack"' },
   { id: 'duende', name: 'Duende Verde', avatar: '🍀', phrase: '"Hmm... Pares, quizás"' },
   { id: 'judio', name: 'Judío', avatar: '✡️', phrase: '"Estas cartas me las prometió Dios"' },
