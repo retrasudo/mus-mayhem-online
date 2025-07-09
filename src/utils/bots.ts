@@ -1,5 +1,4 @@
-
-import { BotStats, Card, Player } from '@/types/game';
+import { BotStats, Card, Player, BetAction } from '@/types/game';
 
 export const BOT_STATS: Record<string, BotStats> = {
   'Chigga': {
@@ -118,9 +117,89 @@ export const BOT_CHARACTERS = [
 export class MusBot {
   constructor(public player: Player) {}
 
+  decideMus(): 'mus' | 'no-mus' {
+    const stats = this.player.stats!;
+    const cortarMus = stats.cortarMus;
+    
+    // Personalidad específica
+    if (this.player.name === 'Pato') {
+      return Math.random() > 0.5 ? 'mus' : 'no-mus';
+    }
+    
+    // Lógica de cortar mus basada en estadísticas
+    if (cortarMus >= 8) return 'no-mus';
+    
+    const handStrength = this.evaluateGeneralStrength();
+    if (cortarMus >= 5 && handStrength > 6) return 'no-mus';
+    
+    return 'mus';
+  }
+
+  decideBet(phase: string, currentBet: number, waitingForResponse: boolean): BetAction {
+    const stats = this.player.stats!;
+    
+    // Si estamos esperando respuesta a una apuesta, decidir quiero/no quiero
+    if (waitingForResponse && currentBet > 0) {
+      return this.decideResponse(phase, currentBet);
+    }
+    
+    // Evaluar la mano para esta fase
+    let handValue = this.evaluateHand(phase);
+    
+    // Aplicar modificadores de personalidad
+    handValue = this.applyLuck(handValue);
+    handValue = this.applyBluff(handValue);
+    handValue = this.applyThinking(handValue);
+    
+    // Personalidades específicas
+    if (this.player.name === 'Pato') {
+      const options = ['paso', 'envido'] as const;
+      const choice = options[Math.floor(Math.random() * options.length)];
+      return { type: choice, playerId: this.player.id, amount: choice === 'envido' ? 2 : undefined };
+    }
+    
+    if (this.player.name === 'Vasco' && stats.osadia >= 8) {
+      if (handValue > 3) {
+        return { type: 'ordago', playerId: this.player.id };
+      }
+    }
+    
+    // Lógica general de apuestas
+    if (handValue >= 8) {
+      return { type: 'ordago', playerId: this.player.id };
+    } else if (handValue >= 5) {
+      return { type: 'envido', playerId: this.player.id, amount: 2 };
+    } else {
+      return { type: 'paso', playerId: this.player.id };
+    }
+  }
+
+  private decideResponse(phase: string, currentBet: number): BetAction {
+    const handValue = this.evaluateHand(phase);
+    const stats = this.player.stats!;
+    
+    // Aplicar osadía a la decisión
+    const adjustedValue = handValue + (stats.osadia / 10) * 2;
+    
+    if (currentBet >= 40) {
+      // Es un órdago
+      return adjustedValue >= 7 ? 
+        { type: 'quiero', playerId: this.player.id } : 
+        { type: 'no-quiero', playerId: this.player.id };
+    } else {
+      // Es un envido
+      if (adjustedValue >= 8) {
+        return { type: 'echo-mas', playerId: this.player.id };
+      } else if (adjustedValue >= 5) {
+        return { type: 'quiero', playerId: this.player.id };
+      } else {
+        return { type: 'no-quiero', playerId: this.player.id };
+      }
+    }
+  }
+
   private evaluateHand(phase: string): number {
     const hand = this.player.hand;
-    const stats = this.player.stats!;
     
     switch (phase) {
       case 'grande':
@@ -131,6 +210,8 @@ export class MusBot {
         return this.evaluatePares();
       case 'juego':
         return this.evaluateJuego();
+      case 'punto':
+        return this.player.punto || 0;
       default:
         return 0;
     }
@@ -162,23 +243,6 @@ export class MusBot {
     return 0; // No tiene juego
   }
 
-  decideMus(): 'mus' | 'no mus' {
-    const stats = this.player.stats!;
-    const cortarMus = stats.cortarMus;
-    
-    // Personalidad específica
-    if (this.player.name === 'Pato') {
-      return Math.random() > 0.5 ? 'mus' : 'no mus';
-    }
-    
-    if (cortarMus >= 8) return 'no mus';
-    
-    const handStrength = this.evaluateGeneralStrength();
-    if (cortarMus >= 5 && handStrength > 6) return 'no mus';
-    
-    return 'mus';
-  }
-
   private evaluateGeneralStrength(): number {
     const grande = this.evaluateHand('grande');
     const chica = this.evaluateHand('chica');
@@ -186,35 +250,6 @@ export class MusBot {
     const juego = this.evaluateHand('juego');
     
     return (grande + chica + pares * 2 + juego * 3) / 4;
-  }
-
-  decideBet(phase: string): 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero' {
-    const stats = this.player.stats!;
-    let handValue = this.evaluateHand(phase);
-    
-    // Aplicar modificadores de personalidad
-    handValue = this.applyLuck(handValue);
-    handValue = this.applyBluff(handValue);
-    handValue = this.applyThinking(handValue);
-    
-    // Personalidades específicas
-    if (this.player.name === 'Pato') {
-      const options = ['paso', 'envido', 'ordago'] as const;
-      return options[Math.floor(Math.random() * options.length)];
-    }
-    
-    if (this.player.name === 'Vasco' && stats.osadia >= 8) {
-      return handValue > 3 ? 'ordago' : 'envido';
-    }
-    
-    if (this.player.name === 'La Zaray' && this.wantsToCheat()) {
-      return handValue > 2 ? 'envido' : 'paso';
-    }
-    
-    // Lógica general
-    if (handValue >= 8) return 'ordago';
-    if (handValue >= 5) return 'envido';
-    return 'paso';
   }
 
   private applyLuck(value: number): number {
@@ -243,12 +278,41 @@ export class MusBot {
     const hand = this.player.hand;
     const toDiscard: number[] = [];
     
-    // Estrategia simple: descartar cartas mediocres
-    hand.forEach((card, index) => {
-      if (card.musValue >= 4 && card.musValue <= 6 && toDiscard.length < 4) {
-        toDiscard.push(index);
+    // Estrategia mejorada: evaluar qué cartas son menos útiles
+    const cardScores = hand.map((card, index) => {
+      let score = 0;
+      
+      // Penalizar cartas mediocres
+      if (card.musValue >= 4 && card.musValue <= 6) {
+        score -= 2;
       }
+      
+      // Valorar cartas altas para grande
+      if (card.musValue === 10) {
+        score += 2;
+      }
+      
+      // Valorar cartas bajas para chica
+      if (card.musValue === 1) {
+        score += 2;
+      }
+      
+      // Valorar cartas que forman pares
+      const sameValues = hand.filter(c => c.musValue === card.musValue).length;
+      if (sameValues > 1) {
+        score += sameValues;
+      }
+      
+      return { index, score };
     });
+    
+    // Descartar las cartas con peor puntuación
+    const sortedCards = cardScores.sort((a, b) => a.score - b.score);
+    const numToDiscard = Math.min(Math.floor(Math.random() * 3) + 1, 4);
+    
+    for (let i = 0; i < numToDiscard; i++) {
+      toDiscard.push(sortedCards[i].index);
+    }
     
     return toDiscard;
   }

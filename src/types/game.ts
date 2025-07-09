@@ -15,7 +15,10 @@ export interface Player {
   position: 'bottom' | 'left' | 'top' | 'right';
   hand: Card[];
   stats?: BotStats;
-  isMano?: boolean; // Indica si es mano (el que empieza)
+  isMano?: boolean;
+  hasPares?: boolean;
+  hasJuego?: boolean;
+  punto?: number;
 }
 
 export interface BotStats {
@@ -32,27 +35,43 @@ export interface BotStats {
 
 export interface GameDialogue {
   playerId: string;
+  playerName: string;
   message: string;
   action: string;
   timestamp: number;
 }
 
 export interface GameState {
-  phase: 'mus' | 'grande' | 'chica' | 'pares' | 'juego' | 'finished';
-  subPhase: 'dealing' | 'mus-decision' | 'discarding' | 'betting' | 'revealing' | 'scoring';
+  phase: 'mus' | 'grande' | 'chica' | 'pares' | 'juego' | 'punto' | 'scoring' | 'finished';
+  subPhase: 'dealing' | 'mus-decision' | 'discarding' | 'betting' | 'revealing' | 'next-round';
   currentPlayer: string;
   currentRound: number;
   currentBet: number;
+  currentBetType: 'envido' | 'ordago' | null;
+  betHistory: BetAction[];
   teamAScore: number;
   teamBScore: number;
+  teamAAmarracos: number;
+  teamBAmarracos: number;
   players: Player[];
   deck: Card[];
   musCount: number;
-  bets: Record<string, 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero'>;
+  playersWantingMus: string[];
+  bets: Record<string, BetAction>;
   roundResults: RoundResult[];
   dialogues: GameDialogue[];
   senasEnabled: boolean;
   companionSignal?: 'buenas' | 'malas' | 'regulares';
+  waitingForResponse: boolean;
+  lastBetPlayer?: string;
+  phaseWinner?: string;
+  adentro: boolean; // Cuando una pareja está cerca de ganar
+}
+
+export interface BetAction {
+  type: 'paso' | 'envido' | 'ordago' | 'quiero' | 'no-quiero' | 'echo-mas';
+  amount?: number;
+  playerId: string;
 }
 
 export interface RoundResult {
@@ -60,13 +79,14 @@ export interface RoundResult {
   winner: 'A' | 'B' | 'tie';
   points: number;
   details: string;
+  isDeje?: boolean;
 }
 
 export type GameAction = 
   | { type: 'DEAL_CARDS' }
-  | { type: 'MUS_DECISION'; playerId: string; decision: 'mus' | 'no mus' }
+  | { type: 'MUS_DECISION'; playerId: string; decision: 'mus' | 'no-mus' }
   | { type: 'DISCARD_CARDS'; playerId: string; cardIndices: number[] }
-  | { type: 'PLACE_BET'; playerId: string; bet: 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero' }
+  | { type: 'PLACE_BET'; playerId: string; bet: BetAction }
   | { type: 'SEND_SIGNAL'; playerId: string; signal: 'buenas' | 'malas' | 'regulares' }
   | { type: 'NEXT_PHASE' }
   | { type: 'RESET_GAME' };

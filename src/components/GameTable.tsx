@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MessageCircle, Settings, Volume2, Crown, Eye } from 'lucide-react';
+import { MessageCircle, Crown, Eye } from 'lucide-react';
 import { PlayerCard } from './PlayerCard';
 import { GameChat } from './GameChat';
 import { CardHand } from './CardHand';
 import { CharacterSelection } from './CharacterSelection';
+import { DialogueBubble } from './DialogueBubble';
 import { MusGameEngine } from '@/utils/gameLogic';
-import { GameState, Player } from '@/types/game';
+import { GameState, Player, BetAction } from '@/types/game';
 
 const GameTable = () => {
   const [showChat, setShowChat] = useState(false);
@@ -23,15 +25,14 @@ const GameTable = () => {
       const interval = setInterval(() => {
         const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayer);
         if (currentPlayer?.isBot) {
-          console.log(`Procesando turno de bot: ${currentPlayer.name}`);
           gameEngine.processBotActions();
           setGameState({ ...gameEngine.getState() });
         }
-      }, 2000);
+      }, 1000);
 
       return () => clearInterval(interval);
     }
-  }, [gameEngine, gameState?.currentPlayer]);
+  }, [gameEngine, gameState?.currentPlayer, gameState?.subPhase]);
 
   const handleCharactersSelected = (players: Player[]) => {
     console.log('Iniciando juego con jugadores:', players.map(p => p.name));
@@ -42,37 +43,49 @@ const GameTable = () => {
     setShowCharacterSelection(false);
   };
 
-  const handleMusDecision = (decision: 'mus' | 'no mus') => {
+  const handleMusDecision = (decision: 'mus' | 'no-mus') => {
     if (!gameEngine || !gameState) return;
     
-    console.log(`Jugador decide: ${decision}`);
-    if (decision === 'no mus') {
-      gameEngine.processMusPhase();
-      setGameState({ ...gameEngine.getState() });
-    } else {
-      gameEngine.nextPlayer();
+    const userGamePlayer = gameState.players.find(p => !p.isBot);
+    if (userGamePlayer) {
+      gameEngine.processMusDecision(userGamePlayer.id, decision);
       setGameState({ ...gameEngine.getState() });
     }
   };
 
-  const handleBet = (bet: 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero') => {
+  const handleBet = (betType: string) => {
     if (!gameEngine || !gameState) return;
     
-    console.log(`Jugador apuesta: ${bet}`);
-    const state = gameEngine.getState();
-    const userGamePlayer = state.players.find(p => !p.isBot);
-    if (userGamePlayer) {
-      state.bets[userGamePlayer.id] = bet;
-      
-      if (bet === 'ordago') {
-        state.currentBet = 40;
-      } else if (bet === 'envido') {
-        state.currentBet += 2;
-      }
-      
-      gameEngine.nextPlayer();
-      setGameState({ ...state });
+    const userGamePlayer = gameState.players.find(p => !p.isBot);
+    if (!userGamePlayer) return;
+
+    let bet: BetAction;
+    
+    switch (betType) {
+      case 'paso':
+        bet = { type: 'paso', playerId: userGamePlayer.id };
+        break;
+      case 'envido':
+        bet = { type: 'envido', playerId: userGamePlayer.id, amount: 2 };
+        break;
+      case 'echo-mas':
+        bet = { type: 'echo-mas', playerId: userGamePlayer.id };
+        break;
+      case 'ordago':
+        bet = { type: 'ordago', playerId: userGamePlayer.id };
+        break;
+      case 'quiero':
+        bet = { type: 'quiero', playerId: userGamePlayer.id };
+        break;
+      case 'no-quiero':
+        bet = { type: 'no-quiero', playerId: userGamePlayer.id };
+        break;
+      default:
+        return;
     }
+    
+    gameEngine.placeBet(userGamePlayer.id, bet);
+    setGameState({ ...gameEngine.getState() });
   };
 
   const handleSendSignal = (signal: 'buenas' | 'malas' | 'regulares') => {
@@ -90,7 +103,6 @@ const GameTable = () => {
     
     const userGamePlayer = gameState.players.find(p => !p.isBot);
     if (userGamePlayer) {
-      console.log(`Jugador descarta cartas en índices: ${selectedIndices}`);
       gameEngine.discardCards(userGamePlayer.id, selectedIndices);
       setGameState({ ...gameEngine.getState() });
     }
@@ -110,7 +122,20 @@ const GameTable = () => {
   const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayer);
   const userGamePlayer = gameState.players.find(p => !p.isBot);
   const isUserTurn = currentPlayer && !currentPlayer.isBot;
-  const companionPlayer = gameState.players.find(p => !p.isBot && p.team === userGamePlayer?.team && p.id !== userGamePlayer?.id);
+
+  const getPhaseDisplayName = (phase: string) => {
+    const names = {
+      'mus': 'Mus',
+      'grande': 'Grande',
+      'chica': 'Chica',
+      'pares': 'Pares',
+      'juego': 'Juego',
+      'punto': 'Punto',
+      'scoring': 'Puntuación',
+      'finished': 'Finalizado'
+    };
+    return names[phase as keyof typeof names] || phase;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-800 via-green-700 to-green-900 relative overflow-hidden">
@@ -122,7 +147,7 @@ const GameTable = () => {
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-white">🃏 El Mus</h1>
           <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-            Ronda {gameState.currentRound} - {gameState.phase.toUpperCase()}
+            Ronda {gameState.currentRound} - {getPhaseDisplayName(gameState.phase)}
           </Badge>
           {currentPlayer && (
             <Badge className="bg-yellow-500 text-black border-yellow-400">
@@ -149,56 +174,73 @@ const GameTable = () => {
       <div className="relative z-10 flex h-[calc(100vh-80px)]">
         {/* Game Table */}
         <div className="flex-1 relative">
-          {/* Simple Score Board - Top left */}
+          {/* Score Board - Top left */}
           <div className="absolute top-6 left-6 z-20">
             <Card className="bg-white/95 backdrop-blur-sm p-4 shadow-lg">
               <div className="text-center">
                 <div className="text-lg font-bold mb-2">Puntuación</div>
-                <div className="flex justify-between items-center gap-6">
+                <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="text-center">
                     <div className="w-4 h-4 bg-blue-500 rounded-full mx-auto mb-1"></div>
-                    <div className="text-2xl font-bold text-blue-600">{gameState.teamAScore}</div>
-                    <div className="text-xs">Equipo A</div>
+                    <div className="font-bold">Equipo A</div>
+                    <div className="text-xs">{gameState.teamAAmarracos} amarracos</div>
+                    <div className="text-xs">{gameState.teamAScore} piedras</div>
                   </div>
                   <div className="text-center">
                     <div className="w-4 h-4 bg-red-500 rounded-full mx-auto mb-1"></div>
-                    <div className="text-2xl font-bold text-red-600">{gameState.teamBScore}</div>
-                    <div className="text-xs">Equipo B</div>
+                    <div className="font-bold">Equipo B</div>
+                    <div className="text-xs">{gameState.teamBAmarracos} amarracos</div>
+                    <div className="text-xs">{gameState.teamBScore} piedras</div>
                   </div>
                 </div>
+                {gameState.adentro && (
+                  <div className="mt-2 text-red-600 font-bold text-sm">
+                    ¡ADENTRO!
+                  </div>
+                )}
               </div>
             </Card>
           </div>
 
-          {/* Dialogues - Top right */}
-          {gameState.dialogues.length > 0 && (
-            <div className="absolute top-6 right-6 z-20 max-w-xs">
-              <Card className="bg-black/80 backdrop-blur-sm p-3 text-white">
-                <div className="text-sm font-semibold mb-2">Diálogos</div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {gameState.dialogues.slice(-3).map((dialogue, index) => {
-                    const player = gameState.players.find(p => p.id === dialogue.playerId);
-                    return (
-                      <div key={index} className="text-xs">
-                        <span className="font-semibold">{player?.name}:</span>
-                        <span className="ml-1">{dialogue.message}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            </div>
-          )}
+          {/* Game Info - Top right */}
+          <div className="absolute top-6 right-6 z-20">
+            <Card className="bg-black/80 backdrop-blur-sm p-3 text-white">
+              <div className="text-sm space-y-1">
+                <div>Fase: {getPhaseDisplayName(gameState.phase)}</div>
+                {gameState.currentBet > 0 && (
+                  <div>Apuesta: {gameState.currentBet} piedras</div>
+                )}
+                {gameState.companionSignal && (
+                  <div className="text-blue-400">
+                    <Eye className="w-3 h-3 inline mr-1" />
+                    Señas: {gameState.companionSignal}
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
 
           {/* Players positioned around the table */}
           <div className="absolute inset-0 p-8">
             {gameState.players.map((player) => (
-              <PlayerCard
-                key={player.id}
-                player={player}
-                isCurrentPlayer={player.id === gameState.currentPlayer}
-                isUserPlayer={!player.isBot}
-              />
+              <div key={player.id} className="relative">
+                <PlayerCard
+                  player={player}
+                  isCurrentPlayer={player.id === gameState.currentPlayer}
+                  isUserPlayer={!player.isBot}
+                />
+                {/* Dialogue Bubbles */}
+                {gameState.dialogues
+                  .filter(d => d.playerId === player.id)
+                  .slice(-1)
+                  .map((dialogue, index) => (
+                    <DialogueBubble
+                      key={`${dialogue.timestamp}-${index}`}
+                      dialogue={dialogue}
+                      player={player}
+                    />
+                  ))}
+              </div>
             ))}
           </div>
 
@@ -207,18 +249,16 @@ const GameTable = () => {
             <div className="w-64 h-40 bg-green-600/40 rounded-xl border-4 border-yellow-400/60 flex items-center justify-center backdrop-blur-sm">
               <div className="text-center text-white">
                 <div className="text-xl font-semibold mb-2">
-                  {gameState.phase === 'mus' ? 'Fase de Mus' : 
-                   `${gameState.phase.charAt(0).toUpperCase() + gameState.phase.slice(1)}`}
+                  {getPhaseDisplayName(gameState.phase)}
                 </div>
                 {gameState.currentBet > 0 && (
                   <div className="text-sm opacity-75 mb-2">
-                    Apuesta: {gameState.currentBet} puntos
+                    Apuesta: {gameState.currentBet} piedras
                   </div>
                 )}
-                {gameState.companionSignal && (
-                  <div className="text-xs bg-blue-500/30 rounded px-2 py-1 mb-2">
-                    <Eye className="w-3 h-3 inline mr-1" />
-                    Tu compañero indica: {gameState.companionSignal}
+                {gameState.waitingForResponse && (
+                  <div className="text-xs bg-yellow-500/30 rounded px-2 py-1">
+                    Esperando respuesta...
                   </div>
                 )}
               </div>
@@ -231,6 +271,7 @@ const GameTable = () => {
               <CardHand 
                 hand={userGamePlayer.hand}
                 gamePhase={gameState.subPhase}
+                onCardSelection={handleCardSelection}
               />
             </div>
           )}
@@ -249,7 +290,7 @@ const GameTable = () => {
                     </Button>
                     <Button 
                       className="bg-red-600 hover:bg-red-700 text-white"
-                      onClick={() => handleMusDecision('no mus')}
+                      onClick={() => handleMusDecision('no-mus')}
                     >
                       No Mus
                     </Button>
@@ -258,25 +299,28 @@ const GameTable = () => {
                 
                 {gameState.subPhase === 'betting' && (
                   <>
-                    <Button 
-                      className="bg-gray-600 hover:bg-gray-700 text-white text-xs px-2"
-                      onClick={() => handleBet('paso')}
-                    >
-                      Paso
-                    </Button>
-                    <Button 
-                      className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs px-2"
-                      onClick={() => handleBet('envido')}
-                    >
-                      Envido
-                    </Button>
-                    <Button 
-                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-2"
-                      onClick={() => handleBet('ordago')}
-                    >
-                      Órdago
-                    </Button>
-                    {gameState.currentBet > 0 && (
+                    {!gameState.waitingForResponse ? (
+                      <>
+                        <Button 
+                          className="bg-gray-600 hover:bg-gray-700 text-white text-xs px-2"
+                          onClick={() => handleBet('paso')}
+                        >
+                          Paso
+                        </Button>
+                        <Button 
+                          className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs px-2"
+                          onClick={() => handleBet('envido')}
+                        >
+                          Envido
+                        </Button>
+                        <Button 
+                          className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-2"
+                          onClick={() => handleBet('ordago')}
+                        >
+                          Órdago
+                        </Button>
+                      </>
+                    ) : (
                       <>
                         <Button 
                           className="bg-green-600 hover:bg-green-700 text-white text-xs px-2"
@@ -286,9 +330,15 @@ const GameTable = () => {
                         </Button>
                         <Button 
                           className="bg-red-600 hover:bg-red-700 text-white text-xs px-2"
-                          onClick={() => handleBet('no quiero')}
+                          onClick={() => handleBet('no-quiero')}
                         >
                           No Quiero
+                        </Button>
+                        <Button 
+                          className="bg-orange-600 hover:bg-orange-700 text-white text-xs px-2"
+                          onClick={() => handleBet('echo-mas')}
+                        >
+                          Echo 2 Más
                         </Button>
                       </>
                     )}
@@ -299,17 +349,17 @@ const GameTable = () => {
           )}
 
           {/* Signals Panel - Left side */}
-          {gameState.senasEnabled && !isUserTurn && userGamePlayer && (
+          {gameState.senasEnabled && !isUserTurn && userGamePlayer && gameState.phase !== 'finished' && (
             <div className="absolute left-6 bottom-6 z-20">
               <Card className="bg-black/70 backdrop-blur-sm p-3 text-white">
-                <div className="text-sm font-semibold mb-2">Señas a tu compañero</div>
+                <div className="text-sm font-semibold mb-2">Señas</div>
                 <div className="flex flex-col gap-2">
                   <Button 
                     size="sm"
                     className="bg-green-600 hover:bg-green-700 text-xs"
                     onClick={() => handleSendSignal('buenas')}
                   >
-                    Tengo buenas
+                    Buenas
                   </Button>
                   <Button 
                     size="sm"
@@ -323,7 +373,7 @@ const GameTable = () => {
                     className="bg-red-600 hover:bg-red-700 text-xs"
                     onClick={() => handleSendSignal('malas')}
                   >
-                    Tengo malas
+                    Malas
                   </Button>
                 </div>
               </Card>
@@ -344,10 +394,13 @@ const GameTable = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="bg-white p-8 text-center max-w-md">
             <h2 className="text-3xl font-bold mb-4">
-              {gameState.teamAScore >= 40 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
+              {gameState.teamAAmarracos >= 8 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
             </h2>
             <div className="text-xl mb-4">
-              Puntuación Final: {gameState.teamAScore} - {gameState.teamBScore}
+              Puntuación Final: {gameState.teamAAmarracos} - {gameState.teamBAmarracos} amarracos
+            </div>
+            <div className="text-sm mb-4">
+              ({gameState.teamAScore} - {gameState.teamBScore} piedras)
             </div>
             <Button
               onClick={() => setShowCharacterSelection(true)}

@@ -1,4 +1,5 @@
-import { GameState, Player, Card, RoundResult, GameDialogue } from '@/types/game';
+
+import { GameState, Player, Card, RoundResult, GameDialogue, BetAction } from '@/types/game';
 import { createDeck, dealCards } from './cards';
 import { MusBot } from './bots';
 
@@ -15,15 +16,22 @@ export class MusGameEngine {
       currentPlayer: players[0].id,
       currentRound: 1,
       currentBet: 0,
+      currentBetType: null,
+      betHistory: [],
       teamAScore: 0,
       teamBScore: 0,
+      teamAAmarracos: 0,
+      teamBAmarracos: 0,
       players,
       deck: createDeck(),
       musCount: 0,
+      playersWantingMus: [],
       bets: {},
       roundResults: [],
       dialogues: [],
-      senasEnabled: true
+      senasEnabled: true,
+      waitingForResponse: false,
+      adentro: false
     };
   }
 
@@ -32,8 +40,12 @@ export class MusGameEngine {
   }
 
   addDialogue(playerId: string, message: string, action: string): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) return;
+
     const dialogue: GameDialogue = {
       playerId,
+      playerName: player.name,
       message,
       action,
       timestamp: Date.now()
@@ -41,9 +53,9 @@ export class MusGameEngine {
     
     this.state.dialogues.push(dialogue);
     
-    // Mantener solo los últimos 10 diálogos
-    if (this.state.dialogues.length > 10) {
-      this.state.dialogues = this.state.dialogues.slice(-10);
+    // Mantener solo los últimos 5 diálogos
+    if (this.state.dialogues.length > 5) {
+      this.state.dialogues = this.state.dialogues.slice(-5);
     }
   }
 
@@ -53,27 +65,447 @@ export class MusGameEngine {
     
     this.state.players.forEach((player, index) => {
       player.hand = hands[index];
+      player.hasPares = this.checkPares(player.hand);
+      player.hasJuego = this.checkJuego(player.hand);
+      player.punto = this.calculatePunto(player.hand);
     });
     
     this.state.phase = 'mus';
     this.state.subPhase = 'mus-decision';
     this.state.musCount = 0;
+    this.state.playersWantingMus = [];
     this.state.bets = {};
+    this.state.betHistory = [];
     this.state.currentBet = 0;
-    this.state.dialogues = [];
+    this.state.currentBetType = null;
+    this.state.waitingForResponse = false;
+    this.state.lastBetPlayer = undefined;
+    this.state.phaseWinner = undefined;
     
+    this.resetCurrentPlayer();
     console.log('Nueva ronda iniciada. Manos repartidas.');
   }
 
-  processMusPhase(): boolean {
-    console.log('Procesando fase de mus...');
+  private checkPares(hand: Card[]): boolean {
+    const values = hand.map(c => c.musValue);
+    const counts = values.reduce((acc, val) => {
+      acc[val] = (acc[val] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
     
+    return Object.values(counts).some(count => count >= 2);
+  }
+
+  private checkJuego(hand: Card[]): boolean {
+    const total = hand.reduce((sum, card) => sum + card.musValue, 0);
+    return total >= 31;
+  }
+
+  private calculatePunto(hand: Card[]): number {
+    return hand.reduce((sum, card) => sum + card.musValue, 0);
+  }
+
+  processMusDecision(playerId: string, decision: 'mus' | 'no-mus'): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) return;
+
+    if (decision === 'mus') {
+      this.state.playersWantingMus.push(playerId);
+      this.addDialogue(playerId, 'Mus', 'mus');
+    } else {
+      this.addDialogue(playerId, 'No hay mus', 'no-mus');
+      // Si alguien dice "no hay mus", se corta el mus
+      this.startBettingPhase();
+      return;
+    }
+
+    // Avanzar al siguiente jugador
+    this.nextPlayer();
+
+    // Si todos han decidido y todos quieren mus, ir al descarte
+    if (this.state.playersWantingMus.length === 4) {
+      this.state.subPhase = 'discarding';
+      this.resetCurrentPlayer();
+      this.addDialogue('system', 'Todos quieren mus. Fase de descarte', 'system');
+    }
+  }
+
+  discardCards(playerId: string, cardIndices: number[]): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) return;
+
+    if (cardIndices.length === 0) {
+      // El jugador no descarta nada
+      this.addDialogue(playerId, 'No descarto', 'no-discard');
+    } else {
+      // Remover cartas seleccionadas
+      const newHand = player.hand.filter((_, index) => !cardIndices.includes(index));
+      
+      // Dar nuevas cartas del mazo
+      while (newHand.length < 4 && this.state.deck.length > 0) {
+        newHand.push(this.state.deck.pop()!);
+      }
+      
+      player.hand = newHand;
+      player.hasPares = this.checkPares(player.hand);
+      player.hasJuego = this.checkJuego(player.hand);
+      player.punto = this.calculatePunto(player.hand);
+      
+      this.addDialogue(playerId, `Descarto ${cardIndices.length} carta${cardIndices.length !== 1 ? 's' : ''}`, 'discard');
+    }
+
+    this.nextPlayer();
+
+    // Verificar si todos han descartado
+    const currentPlayerIndex = this.state.players.findIndex(p => p.id === this.state.currentPlayer);
+    const manoIndex = this.state.players.findIndex(p => p.isMano);
+    
+    if (currentPlayerIndex === manoIndex) {
+      // Todos han descartado, volver a la decisión de mus
+      this.state.subPhase = 'mus-decision';
+      this.state.playersWantingMus = [];
+      this.state.musCount++;
+      this.addDialogue('system', 'Nueva ronda de mus', 'system');
+    }
+  }
+
+  private startBettingPhase(): void {
     this.state.phase = 'grande';
     this.state.subPhase = 'betting';
+    this.state.bets = {};
+    this.state.betHistory = [];
+    this.state.currentBet = 0;
+    this.state.waitingForResponse = false;
     this.resetCurrentPlayer();
+    console.log('Iniciando fase de apuestas: Grande');
+  }
+
+  placeBet(playerId: string, bet: BetAction): void {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) return;
+
+    this.state.bets[playerId] = bet;
+    this.state.betHistory.push(bet);
+
+    switch (bet.type) {
+      case 'paso':
+        this.addDialogue(playerId, 'Paso', 'bet');
+        this.handlePaso(playerId);
+        break;
+      case 'envido':
+        const amount = bet.amount || 2;
+        this.state.currentBet += amount;
+        this.state.currentBetType = 'envido';
+        this.state.lastBetPlayer = playerId;
+        this.state.waitingForResponse = true;
+        this.addDialogue(playerId, `Envido ${amount}`, 'bet');
+        this.nextPlayer();
+        break;
+      case 'echo-mas':
+        this.state.currentBet += 2;
+        this.state.lastBetPlayer = playerId;
+        this.addDialogue(playerId, 'Echo 2 más', 'bet');
+        this.nextPlayer();
+        break;
+      case 'ordago':
+        this.state.currentBet = 40;
+        this.state.currentBetType = 'ordago';
+        this.state.lastBetPlayer = playerId;
+        this.state.waitingForResponse = true;
+        this.addDialogue(playerId, '¡Órdago!', 'bet');
+        this.nextPlayer();
+        break;
+      case 'quiero':
+        this.addDialogue(playerId, 'Quiero', 'bet');
+        this.handleQuiero();
+        break;
+      case 'no-quiero':
+        this.addDialogue(playerId, 'No quiero', 'bet');
+        this.handleNoQuiero();
+        break;
+    }
+  }
+
+  private handlePaso(playerId: string): void {
+    // Si todos pasan en una fase, se gana 1 piedra al mejor
+    const allPassed = this.checkAllPassed();
+    if (allPassed) {
+      this.resolvePhaseWithoutBets();
+    } else {
+      this.nextPlayer();
+    }
+  }
+
+  private handleQuiero(): void {
+    if (this.state.currentBetType === 'ordago') {
+      // Órdago aceptado - se decide la partida
+      this.resolveOrdago();
+    } else {
+      // Envido aceptado - continuar a la siguiente fase
+      this.nextPhase();
+    }
+  }
+
+  private handleNoQuiero(): void {
+    // El equipo que apostó gana 1 piedra (deje)
+    const betPlayer = this.state.players.find(p => p.id === this.state.lastBetPlayer);
+    if (betPlayer) {
+      this.addPoints(betPlayer.team, 1, 'deje');
+    }
+    this.nextPhase();
+  }
+
+  private checkAllPassed(): boolean {
+    const activePlayers = this.getActivePlayers();
+    return activePlayers.every(p => this.state.bets[p.id]?.type === 'paso');
+  }
+
+  private getActivePlayers(): Player[] {
+    switch (this.state.phase) {
+      case 'pares':
+        return this.state.players.filter(p => p.hasPares);
+      case 'juego':
+        return this.state.players.filter(p => p.hasJuego);
+      case 'punto':
+        return this.state.players.filter(p => !p.hasJuego);
+      default:
+        return this.state.players;
+    }
+  }
+
+  private resolvePhaseWithoutBets(): void {
+    const winner = this.determinePhaseWinner();
+    if (winner) {
+      this.addPoints(winner, 1, `${this.state.phase} en paso`);
+    }
+    this.nextPhase();
+  }
+
+  private resolveOrdago(): void {
+    const winner = this.determinePhaseWinner();
+    if (winner) {
+      // El ganador del órdago gana toda la partida
+      if (winner === 'A') {
+        this.state.teamAAmarracos = 8;
+      } else {
+        this.state.teamBAmarracos = 8;
+      }
+      this.state.phase = 'finished';
+      this.addDialogue('system', `¡Equipo ${winner} gana la partida por órdago!`, 'game-end');
+    }
+  }
+
+  private determinePhaseWinner(): 'A' | 'B' | null {
+    const teamAPlayers = this.state.players.filter(p => p.team === 'A');
+    const teamBPlayers = this.state.players.filter(p => p.team === 'B');
+
+    const teamABest = this.getBestHandForPhase(teamAPlayers);
+    const teamBBest = this.getBestHandForPhase(teamBPlayers);
+
+    if (teamABest > teamBBest) return 'A';
+    if (teamBBest > teamABest) return 'B';
+    return null;
+  }
+
+  private getBestHandForPhase(players: Player[]): number {
+    return Math.max(...players.map(player => {
+      const hand = player.hand;
+      
+      switch (this.state.phase) {
+        case 'grande':
+          return Math.max(...hand.map(c => c.musValue));
+        case 'chica':
+          return 11 - Math.min(...hand.map(c => c.musValue));
+        case 'pares':
+          return this.evaluateParesValue(hand);
+        case 'juego':
+          return this.evaluateJuegoValue(hand);
+        case 'punto':
+          return player.punto || 0;
+        default:
+          return 0;
+      }
+    }));
+  }
+
+  private evaluateParesValue(hand: Card[]): number {
+    const values = hand.map(c => c.musValue);
+    const counts = values.reduce((acc, val) => {
+      acc[val] = (acc[val] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
     
-    console.log('Mus cortado. Pasando a la fase de Grande.');
-    return true;
+    let score = 0;
+    const pairs = Object.entries(counts).filter(([_, count]) => count >= 2);
+    
+    for (const [value, count] of pairs) {
+      if (count === 4) score += 6; // Duples
+      else if (count === 3) score += 3; // Medias
+      else if (count === 2) score += 1; // Pares
+    }
+    
+    return score;
+  }
+
+  private evaluateJuegoValue(hand: Card[]): number {
+    const total = hand.reduce((sum, card) => sum + card.musValue, 0);
+    if (total === 31) return 100; // Mejor juego
+    if (total >= 31) return total;
+    return 0;
+  }
+
+  nextPhase(): void {
+    const phases = ['grande', 'chica', 'pares', 'juego', 'punto'];
+    let currentIndex = phases.indexOf(this.state.phase);
+    
+    // Saltar fases que no aplican
+    while (currentIndex < phases.length - 1) {
+      currentIndex++;
+      const nextPhase = phases[currentIndex];
+      
+      if (nextPhase === 'pares' && !this.state.players.some(p => p.hasPares)) {
+        continue;
+      }
+      if (nextPhase === 'juego' && !this.state.players.some(p => p.hasJuego)) {
+        continue;
+      }
+      if (nextPhase === 'punto' && this.state.players.some(p => p.hasJuego)) {
+        continue;
+      }
+      
+      this.state.phase = nextPhase as any;
+      this.state.subPhase = 'betting';
+      this.state.bets = {};
+      this.state.betHistory = [];
+      this.state.currentBet = 0;
+      this.state.currentBetType = null;
+      this.state.waitingForResponse = false;
+      this.resetCurrentPlayer();
+      console.log(`Pasando a la fase: ${this.state.phase}`);
+      return;
+    }
+    
+    // No quedan más fases, terminar la mano
+    this.finishHand();
+  }
+
+  private finishHand(): void {
+    this.state.phase = 'scoring';
+    this.state.subPhase = 'revealing';
+    
+    // Resolver todas las apuestas aceptadas
+    this.resolveAllBets();
+    
+    // Verificar si algún equipo ha ganado
+    this.checkGameEnd();
+    
+    // Preparar siguiente mano
+    setTimeout(() => {
+      if (this.state.phase !== 'finished') {
+        this.state.currentRound++;
+        this.dealNewRound();
+      }
+    }, 3000);
+  }
+
+  private resolveAllBets(): void {
+    // Resolver todas las fases que tuvieron apuestas aceptadas
+    const phases = ['grande', 'chica', 'pares', 'juego', 'punto'];
+    
+    phases.forEach(phase => {
+      const phaseBets = this.state.betHistory.filter(bet => 
+        bet.type === 'quiero' && this.getPhaseForBet(bet) === phase
+      );
+      
+      if (phaseBets.length > 0) {
+        const winner = this.determinePhaseWinner();
+        if (winner) {
+          this.addPoints(winner, this.state.currentBet, `${phase} ganado`);
+        }
+      }
+    });
+  }
+
+  private getPhaseForBet(bet: BetAction): string {
+    // Lógica simplificada - en un juego real necesitarías trackear mejor
+    return this.state.phase;
+  }
+
+  private addPoints(team: 'A' | 'B', points: number, reason: string): void {
+    if (team === 'A') {
+      this.state.teamAScore += points;
+    } else {
+      this.state.teamBScore += points;
+    }
+    
+    // Convertir piedras a amarracos
+    this.convertToAmarracos();
+    
+    // Verificar "adentro" (35+ puntos)
+    if (this.state.teamAScore >= 35 || this.state.teamBScore >= 35) {
+      this.state.adentro = true;
+      this.addDialogue('system', '¡Adentro!', 'adentro');
+    }
+    
+    this.addDialogue('system', `Equipo ${team} gana ${points} piedra${points !== 1 ? 's' : ''} por ${reason}`, 'scoring');
+  }
+
+  private convertToAmarracos(): void {
+    // Convertir piedras del equipo A
+    if (this.state.teamAScore >= 5) {
+      const newAmarracos = Math.floor(this.state.teamAScore / 5);
+      this.state.teamAAmarracos += newAmarracos;
+      this.state.teamAScore = this.state.teamAScore % 5;
+    }
+    
+    // Convertir piedras del equipo B
+    if (this.state.teamBScore >= 5) {
+      const newAmarracos = Math.floor(this.state.teamBScore / 5);
+      this.state.teamBAmarracos += newAmarracos;
+      this.state.teamBScore = this.state.teamBScore % 5;
+    }
+  }
+
+  private checkGameEnd(): void {
+    if (this.state.teamAAmarracos >= 8) {
+      this.state.phase = 'finished';
+      this.addDialogue('system', '¡Equipo A gana la partida!', 'game-end');
+    } else if (this.state.teamBAmarracos >= 8) {
+      this.state.phase = 'finished';
+      this.addDialogue('system', '¡Equipo B gana la partida!', 'game-end');
+    }
+  }
+
+  processBotActions(): void {
+    const currentPlayer = this.state.players.find(p => p.id === this.state.currentPlayer);
+    if (!currentPlayer?.isBot) return;
+
+    const bot = new MusBot(currentPlayer);
+
+    try {
+      if (this.state.subPhase === 'mus-decision') {
+        const decision = bot.decideMus();
+        setTimeout(() => {
+          this.processMusDecision(currentPlayer.id, decision);
+        }, 1500);
+      } else if (this.state.subPhase === 'discarding') {
+        const cardsToDiscard = bot.selectCardsToDiscard();
+        setTimeout(() => {
+          this.discardCards(currentPlayer.id, cardsToDiscard);
+        }, 2000);
+      } else if (this.state.subPhase === 'betting') {
+        const bet = bot.decideBet(this.state.phase, this.state.currentBet, this.state.waitingForResponse);
+        setTimeout(() => {
+          this.placeBet(currentPlayer.id, bet);
+        }, 1800);
+      }
+    } catch (error) {
+      console.error('Error procesando acción del bot:', error);
+      // Fallback: hacer que el bot pase
+      if (this.state.subPhase === 'betting') {
+        this.placeBet(currentPlayer.id, { type: 'paso', playerId: currentPlayer.id });
+      }
+    }
   }
 
   sendCompanionSignal(playerId: string, signal: 'buenas' | 'malas' | 'regulares'): void {
@@ -88,196 +520,13 @@ export class MusGameEngine {
       if (this.state.companionSignal === signal) {
         this.state.companionSignal = undefined;
       }
-    }, 5000);
-  }
-
-  discardCards(playerId: string, cardIndices: number[]): void {
-    const player = this.state.players.find(p => p.id === playerId);
-    if (!player) return;
-
-    console.log(`${player.name} descarta cartas en posiciones:`, cardIndices);
-
-    // Remover cartas seleccionadas
-    const newHand = player.hand.filter((_, index) => !cardIndices.includes(index));
-    
-    // Dar nuevas cartas del mazo
-    while (newHand.length < 4 && this.state.deck.length > 0) {
-      newHand.push(this.state.deck.pop()!);
-    }
-    
-    player.hand = newHand;
-    console.log(`${player.name} nueva mano:`, newHand.map(c => c.name));
-  }
-
-  evaluateRound(phase: string): RoundResult {
-    const teamAPlayers = this.state.players.filter(p => p.team === 'A');
-    const teamBPlayers = this.state.players.filter(p => p.team === 'B');
-
-    const teamABest = this.getBestHandForPhase(teamAPlayers, phase);
-    const teamBBest = this.getBestHandForPhase(teamBPlayers, phase);
-
-    let winner: 'A' | 'B' | 'tie' = 'tie';
-    let points = 1; // Puntos base por ganar la ronda
-
-    if (teamABest > teamBBest) {
-      winner = 'A';
-    } else if (teamBBest > teamABest) {
-      winner = 'B';
-    }
-
-    // Aplicar puntos especiales por órdago
-    if (this.state.currentBet >= 30) {
-      points = 30; // Órdago vale 30 puntos
-    } else if (this.state.currentBet >= 10) {
-      points = this.state.currentBet;
-    }
-
-    return {
-      phase,
-      winner,
-      points,
-      details: `${phase}: Equipo ${winner} gana con ${winner === 'A' ? teamABest : teamBBest}`
-    };
-  }
-
-  private getBestHandForPhase(players: Player[], phase: string): number {
-    return Math.max(...players.map(player => {
-      const hand = player.hand;
-      
-      switch (phase) {
-        case 'grande':
-          return Math.max(...hand.map(c => c.musValue));
-        case 'chica':
-          return 11 - Math.min(...hand.map(c => c.musValue));
-        case 'pares':
-          return this.evaluatePares(hand);
-        case 'juego':
-          return this.evaluateJuego(hand);
-        default:
-          return 0;
-      }
-    }));
-  }
-
-  private evaluatePares(hand: Card[]): number {
-    const values = hand.map(c => c.musValue);
-    const counts = values.reduce((acc, val) => {
-      acc[val] = (acc[val] || 0) + 1;
-      return acc;
-    }, {} as Record<number, number>);
-    
-    const pairs = Object.values(counts).filter(count => count >= 2);
-    if (pairs.length === 0) return 0;
-    
-    return pairs.reduce((sum, count) => {
-      if (count === 4) return sum + 6; // Duples
-      if (count === 3) return sum + 3; // Medias  
-      if (count === 2) return sum + 1; // Pares
-      return sum;
-    }, 0);
-  }
-
-  private evaluateJuego(hand: Card[]): number {
-    const total = hand.reduce((sum, card) => sum + card.musValue, 0);
-    if (total >= 31) return total;
-    return 0;
-  }
-
-  nextPhase(): void {
-    const phases = ['grande', 'chica', 'pares', 'juego'];
-    const currentIndex = phases.indexOf(this.state.phase);
-    
-    if (currentIndex < phases.length - 1) {
-      this.state.phase = phases[currentIndex + 1] as any;
-      this.state.subPhase = 'betting';
-      this.state.bets = {};
-      this.state.currentBet = 0;
-      this.resetCurrentPlayer();
-      console.log(`Pasando a la fase: ${this.state.phase}`);
-    } else {
-      this.finishRound();
-    }
-  }
-
-  private finishRound(): void {
-    console.log('Finalizando ronda...');
-    
-    const phases = ['grande', 'chica', 'pares', 'juego'];
-    phases.forEach(phase => {
-      const result = this.evaluateRound(phase);
-      this.state.roundResults.push(result);
-      
-      if (result.winner === 'A') {
-        this.state.teamAScore += result.points;
-      } else if (result.winner === 'B') {
-        this.state.teamBScore += result.points;
-      }
-      
-      console.log(`${phase}: Equipo ${result.winner} gana ${result.points} puntos`);
-    });
-
-    if (this.state.teamAScore >= 40 || this.state.teamBScore >= 40) {
-      this.state.phase = 'finished';
-      console.log('¡Juego terminado!');
-    } else {
-      this.state.currentRound++;
-      this.dealNewRound();
-    }
-  }
-
-  processBotActions(): void {
-    const currentPlayer = this.state.players.find(p => p.id === this.state.currentPlayer);
-    if (!currentPlayer?.isBot) return;
-
-    const bot = new MusBot(currentPlayer);
-
-    try {
-      if (this.state.subPhase === 'mus-decision') {
-        const decision = bot.decideMus();
-        const phrase = bot.getBotPhrase('mus');
-        
-        this.addDialogue(currentPlayer.id, phrase, 'mus');
-        console.log(`${currentPlayer.name}: ${phrase} - ${decision}`);
-        
-        if (decision === 'no mus') {
-          this.processMusPhase();
-        } else {
-          this.nextPlayer();
-        }
-      } else if (this.state.subPhase === 'betting') {
-        const bet = bot.decideBet(this.state.phase);
-        const phrase = bot.getBotPhrase('bet');
-        
-        this.addDialogue(currentPlayer.id, phrase, 'bet');
-        console.log(`${currentPlayer.name}: ${phrase} - ${bet}`);
-        
-        this.state.bets[currentPlayer.id] = bet;
-        
-        if (bet === 'ordago') {
-          this.state.currentBet = 40;
-        } else if (bet === 'envido') {
-          this.state.currentBet += 2;
-        }
-        
-        const allBets = Object.keys(this.state.bets).length;
-        if (allBets >= this.state.players.length) {
-          this.nextPhase();
-        } else {
-          this.nextPlayer();
-        }
-      }
-    } catch (error) {
-      console.error('Error procesando acción del bot:', error);
-      this.nextPlayer();
-    }
+    }, 3000);
   }
 
   nextPlayer(): void {
     const currentIndex = this.state.players.findIndex(p => p.id === this.state.currentPlayer);
     const nextIndex = (currentIndex + 1) % this.state.players.length;
     this.state.currentPlayer = this.state.players[nextIndex].id;
-    
-    console.log(`Turno pasa a: ${this.state.players[nextIndex].name}`);
   }
 
   private resetCurrentPlayer(): void {
