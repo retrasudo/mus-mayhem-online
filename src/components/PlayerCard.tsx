@@ -3,15 +3,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Crown, Bot } from 'lucide-react';
-
-interface Player {
-  id: string;
-  name: string;
-  avatar: string;
-  isBot: boolean;
-  team: 'A' | 'B';
-  position: 'bottom' | 'left' | 'top' | 'right';
-}
+import { Player } from '@/types/game';
 
 interface PlayerCardProps {
   player: Player;
@@ -37,6 +29,21 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
 
   const getTeamColor = () => {
     return player.team === 'A' ? 'bg-blue-500' : 'bg-red-500';
+  };
+
+  const getBotPhrase = () => {
+    const phrases: Record<string, string> = {
+      'Chigga': '"Unga unga mus"',
+      'Xosé Roberto': '"¡Caldereta pura!"',
+      'La Zaray': '"Yo gano siempre"',
+      'Pato': '"Quack quack"',
+      'Duende Verde': '"Hmm... Pares, quizás"',
+      'Judío': '"Estas cartas me las prometió Dios"',
+      'Vasco': '"¡Órdago!"',
+      'Policía': '"¡Señor mono, está arrestado!"',
+      'Evaristo': '"Llevo jugando desde Franco..."'
+    };
+    return phrases[player.name] || '';
   };
 
   return (
@@ -76,9 +83,9 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
           {/* Cards indicator for other players */}
           {!isUserPlayer && (
             <div className="flex gap-1">
-              {[1, 2, 3, 4].map((card) => (
+              {player.hand.map((_, cardIndex) => (
                 <div
-                  key={card}
+                  key={cardIndex}
                   className="w-3 h-4 bg-blue-600 rounded-sm border border-white"
                 />
               ))}
@@ -88,10 +95,15 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
           {/* Bot status/phrase */}
           {player.isBot && (
             <div className="text-xs text-gray-600 text-center max-w-[120px] italic">
-              {player.name === 'Chigga' && '"Unga unga mus"'}
-              {player.name === 'Xosé Roberto' && '"¡Caldereta pura!"'}
-              {player.name === 'La Zaray' && '"Yo gano siempre"'}
-              {player.name === 'Pato' && '"Quack quack"'}
+              {getBotPhrase()}
+            </div>
+          )}
+
+          {/* Player stats for bots */}
+          {player.isBot && player.stats && (
+            <div className="text-xs text-gray-500 text-center">
+              <div>Osadía: {player.stats.osadia}/10</div>
+              <div>Faroleo: {player.stats.faroleo}/10</div>
             </div>
           )}
         </div>

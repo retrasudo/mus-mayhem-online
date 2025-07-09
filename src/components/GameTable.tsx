@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,45 +8,83 @@ import { PlayerCard } from './PlayerCard';
 import { GameChat } from './GameChat';
 import { CardHand } from './CardHand';
 import { ScoreBoard } from './ScoreBoard';
-
-interface Player {
-  id: string;
-  name: string;
-  avatar: string;
-  isBot: boolean;
-  team: 'A' | 'B';
-  position: 'bottom' | 'left' | 'top' | 'right';
-}
-
-interface GameState {
-  phase: 'mus' | 'grande' | 'chica' | 'pares' | 'juego';
-  currentPlayer: string;
-  pot: number;
-  teamAScore: number;
-  teamBScore: number;
-  round: number;
-}
+import { CharacterSelection } from './CharacterSelection';
+import { MusGameEngine } from '@/utils/gameLogic';
+import { GameState, Player } from '@/types/game';
 
 const GameTable = () => {
   const [showChat, setShowChat] = useState(false);
-  const [gameState, setGameState] = useState<GameState>({
-    phase: 'mus',
-    currentPlayer: 'player1',
-    pot: 0,
-    teamAScore: 0,
-    teamBScore: 15,
-    round: 1
-  });
+  const [showCharacterSelection, setShowCharacterSelection] = useState(true);
+  const [gameEngine, setGameEngine] = useState<MusGameEngine | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
 
-  const players: Player[] = [
-    { id: 'player1', name: 'Tú', avatar: '🧑‍💻', isBot: false, team: 'A', position: 'bottom' },
-    { id: 'player2', name: 'Chigga', avatar: '🐵', isBot: true, team: 'B', position: 'left' },
-    { id: 'player3', name: 'Xosé Roberto', avatar: '🧓🏻', isBot: true, team: 'A', position: 'top' },
-    { id: 'player4', name: 'La Zaray', avatar: '💅', isBot: true, team: 'B', position: 'right' }
-  ];
+  const userPlayer = { name: 'Tú', avatar: '🧑‍💻' };
 
-  const currentPlayer = players.find(p => p.id === gameState.currentPlayer);
-  const userPlayer = players.find(p => !p.isBot);
+  useEffect(() => {
+    if (gameEngine) {
+      const interval = setInterval(() => {
+        gameEngine.processBotActions();
+        setGameState(gameEngine.getState());
+      }, 2000);
+
+      return () => clearInterval(interval);
+    }
+  }, [gameEngine]);
+
+  const handleCharactersSelected = (players: Player[]) => {
+    const engine = new MusGameEngine(players);
+    engine.dealNewRound();
+    setGameEngine(engine);
+    setGameState(engine.getState());
+    setShowCharacterSelection(false);
+  };
+
+  const handleMusDecision = (decision: 'mus' | 'no mus') => {
+    if (!gameEngine) return;
+    
+    // Procesar decisión del usuario
+    if (decision === 'no mus') {
+      gameEngine.processMusPhase();
+      setGameState(gameEngine.getState());
+    }
+  };
+
+  const handleBet = (bet: 'paso' | 'envido' | 'ordago' | 'quiero' | 'no quiero') => {
+    if (!gameEngine || !gameState) return;
+    
+    // Procesar apuesta del usuario
+    const state = gameEngine.getState();
+    state.bets[userPlayer.name] = bet;
+    
+    if (bet === 'ordago') {
+      state.currentBet = 30;
+    } else if (bet === 'envido') {
+      state.currentBet += 2;
+    }
+    
+    setGameState(state);
+  };
+
+  const handleCardSelection = (selectedIndices: number[]) => {
+    if (!gameEngine || !gameState) return;
+    
+    gameEngine.discardCards('user', selectedIndices);
+    setGameState(gameEngine.getState());
+  };
+
+  if (showCharacterSelection) {
+    return (
+      <CharacterSelection
+        onCharactersSelected={handleCharactersSelected}
+        userPlayer={userPlayer}
+      />
+    );
+  }
+
+  if (!gameState) return null;
+
+  const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayer);
+  const userGamePlayer = gameState.players.find(p => !p.isBot);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-800 via-green-700 to-green-900 relative overflow-hidden">
@@ -58,8 +96,16 @@ const GameTable = () => {
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-white">🃏 El Mus</h1>
           <Badge variant="secondary" className="bg-white/20 text-white">
-            Ronda {gameState.round} - {gameState.phase.toUpperCase()}
+            Ronda {gameState.currentRound} - {gameState.phase.toUpperCase()}
           </Badge>
+          {gameState.subPhase && (
+            <Badge variant="outline" className="bg-white/10 text-white border-white/30">
+              {gameState.subPhase === 'mus-decision' ? 'Decisión Mus' :
+               gameState.subPhase === 'discarding' ? 'Descartes' :
+               gameState.subPhase === 'betting' ? 'Apuestas' :
+               gameState.subPhase === 'revealing' ? 'Revelando' : 'Puntuando'}
+            </Badge>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -98,12 +144,12 @@ const GameTable = () => {
               <ScoreBoard 
                 teamAScore={gameState.teamAScore}
                 teamBScore={gameState.teamBScore}
-                pot={gameState.pot}
+                pot={gameState.currentBet}
               />
             </div>
 
             {/* Players positioned around the table */}
-            {players.map((player) => (
+            {gameState.players.map((player) => (
               <PlayerCard
                 key={player.id}
                 player={player}
@@ -116,37 +162,91 @@ const GameTable = () => {
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
               <div className="w-48 h-32 bg-green-600/30 rounded-xl border-4 border-yellow-400/50 flex items-center justify-center">
                 <div className="text-center text-white">
-                  <div className="text-lg font-semibold">Bote: {gameState.pot}</div>
-                  <div className="text-sm opacity-75">piedras</div>
+                  <div className="text-lg font-semibold">
+                    {gameState.phase === 'mus' ? 'Fase de Mus' : 
+                     `${gameState.phase.charAt(0).toUpperCase() + gameState.phase.slice(1)}`}
+                  </div>
+                  <div className="text-sm opacity-75">
+                    Apuesta: {gameState.currentBet} piedras
+                  </div>
+                  {gameState.musCount > 0 && (
+                    <div className="text-xs opacity-60">
+                      Mus #{gameState.musCount}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* User's Hand */}
-            {userPlayer && (
+            {userGamePlayer && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-                <CardHand />
+                <CardHand 
+                  hand={userGamePlayer.hand}
+                  onCardSelection={handleCardSelection}
+                  gamePhase={gameState.subPhase}
+                />
               </div>
             )}
 
             {/* Game Actions */}
             <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2">
               <div className="flex gap-3">
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  Mus
-                </Button>
-                <Button className="bg-red-600 hover:bg-red-700">
-                  No Mus
-                </Button>
-                <Button className="bg-yellow-600 hover:bg-yellow-700">
-                  Pasar
-                </Button>
-                <Button className="bg-green-600 hover:bg-green-700">
-                  Envidar
-                </Button>
-                <Button className="bg-purple-600 hover:bg-purple-700">
-                  Órdago
-                </Button>
+                {gameState.subPhase === 'mus-decision' && (
+                  <>
+                    <Button 
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => handleMusDecision('mus')}
+                    >
+                      Mus
+                    </Button>
+                    <Button 
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={() => handleMusDecision('no mus')}
+                    >
+                      No Mus
+                    </Button>
+                  </>
+                )}
+                
+                {gameState.subPhase === 'betting' && (
+                  <>
+                    <Button 
+                      className="bg-gray-600 hover:bg-gray-700"
+                      onClick={() => handleBet('paso')}
+                    >
+                      Paso
+                    </Button>
+                    <Button 
+                      className="bg-yellow-600 hover:bg-yellow-700"
+                      onClick={() => handleBet('envido')}
+                    >
+                      Envido
+                    </Button>
+                    <Button 
+                      className="bg-purple-600 hover:bg-purple-700"
+                      onClick={() => handleBet('ordago')}
+                    >
+                      Órdago
+                    </Button>
+                    {gameState.currentBet > 0 && (
+                      <>
+                        <Button 
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handleBet('quiero')}
+                        >
+                          Quiero
+                        </Button>
+                        <Button 
+                          className="bg-red-600 hover:bg-red-700"
+                          onClick={() => handleBet('no quiero')}
+                        >
+                          No Quiero
+                        </Button>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -159,6 +259,26 @@ const GameTable = () => {
           </div>
         )}
       </div>
+
+      {/* Game Over Modal */}
+      {gameState.phase === 'finished' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="bg-white p-8 text-center">
+            <h2 className="text-3xl font-bold mb-4">
+              {gameState.teamAScore >= 30 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
+            </h2>
+            <div className="text-xl mb-4">
+              Puntuación Final: {gameState.teamAScore} - {gameState.teamBScore}
+            </div>
+            <Button
+              onClick={() => setShowCharacterSelection(true)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Nueva Partida
+            </Button>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };
