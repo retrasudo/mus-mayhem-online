@@ -9,7 +9,7 @@ import { GameChat } from './GameChat';
 import { CardHand } from './CardHand';
 import { CharacterSelection } from './CharacterSelection';
 import { DialogueBubble } from './DialogueBubble';
-import { MusGameEngine } from '@/utils/gameLogic';
+import { MusGameEngine } from '@/utils/game';
 import { GameState, Player, BetAction } from '@/types/game';
 
 const GameTable = () => {
