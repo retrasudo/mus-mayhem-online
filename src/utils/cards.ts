@@ -40,9 +40,11 @@ export const getCardName = (value: number): string => {
 };
 
 export const getMusValue = (value: number): number => {
-  // En el mus: As=1, 2=2, 3=3, 4=4, 5=5, 6=6, 7=7, Sota=Caballo=Rey=10
-  if (value >= 10) return 10;
-  return value;
+  // En el mus: As=1, 2=1, 3=10, 4=4, 5=5, 6=6, 7=7, Sota=10, Caballo=10, Rey=10
+  if (value === 1 || value === 2) return 1; // As y 2 valen 1
+  if (value === 3) return 10; // Tres vale 10 (como rey)
+  if (value >= 10) return 10; // Sota, Caballo, Rey valen 10
+  return value; // 4,5,6,7 valen su número
 };
 
 export const shuffleDeck = (deck: Card[]): Card[] => {
@@ -82,4 +84,14 @@ export const getSuitSymbol = (suit: string): string => {
 
 export const getSuitColor = (suit: string): string => {
   return suit === 'oros' || suit === 'copas' ? 'text-red-600' : 'text-black';
+};
+
+// Obtener valor de carta para orden (Grande/Chica)
+export const getCardOrder = (value: number): number => {
+  // Orden: Rey(12)=12, Tres(3)=11, Caballo(11)=10, Sota(10)=9, 7=7, 6=6, 5=5, 4=4, 2=2, As(1)=1
+  if (value === 12) return 12; // Rey
+  if (value === 3) return 11;  // Tres (igual que rey en valor pero menor en orden)
+  if (value === 11) return 10; // Caballo
+  if (value === 10) return 9;  // Sota
+  return value; // 7,6,5,4,2,1 mantienen su orden natural
 };

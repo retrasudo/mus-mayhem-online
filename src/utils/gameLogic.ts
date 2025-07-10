@@ -1,6 +1,6 @@
 
 import { GameState, Player, Card, RoundResult, GameDialogue, BetAction } from '@/types/game';
-import { createDeck, dealCards } from './cards';
+import { createDeck, dealCards, getCardOrder } from './cards';
 import { MusBot } from './bots';
 
 export class MusGameEngine {
@@ -313,15 +313,16 @@ export class MusGameEngine {
       
       switch (this.state.phase) {
         case 'grande':
-          return Math.max(...hand.map(c => c.musValue));
+          return Math.max(...hand.map(c => getCardOrder(c.value)));
         case 'chica':
-          return 11 - Math.min(...hand.map(c => c.musValue));
+          return 13 - Math.min(...hand.map(c => getCardOrder(c.value)));
         case 'pares':
           return this.evaluateParesValue(hand);
         case 'juego':
           return this.evaluateJuegoValue(hand);
         case 'punto':
-          return player.punto || 0;
+          const total = hand.reduce((sum, card) => sum + card.musValue, 0);
+          return total >= 31 ? 0 : total; // Solo si no tiene juego
         default:
           return 0;
       }
@@ -336,22 +337,39 @@ export class MusGameEngine {
     }, {} as Record<number, number>);
     
     let score = 0;
+    let hasAnyPair = false;
     const pairs = Object.entries(counts).filter(([_, count]) => count >= 2);
     
     for (const [value, count] of pairs) {
-      if (count === 4) score += 6; // Duples
-      else if (count === 3) score += 3; // Medias
-      else if (count === 2) score += 1; // Pares
+      hasAnyPair = true;
+      const cardValue = parseInt(value);
+      if (count === 4) {
+        score += 100 + cardValue; // Duples (muy alto)
+      } else if (count === 3) {
+        score += 50 + cardValue; // Medias
+      } else if (count === 2) {
+        score += 10 + cardValue; // Pares simples
+      }
     }
     
-    return score;
+    // Duples especiales (dos pares diferentes)
+    if (pairs.length === 2 && pairs.every(([_, count]) => count === 2)) {
+      const values = pairs.map(([v, _]) => parseInt(v)).sort((a,b) => b-a);
+      score = 200 + values[0] + values[1]; // Duples (dos pares)
+    }
+    
+    return hasAnyPair ? score : 0;
   }
 
   private evaluateJuegoValue(hand: Card[]): number {
     const total = hand.reduce((sum, card) => sum + card.musValue, 0);
-    if (total === 31) return 100; // Mejor juego
-    if (total >= 31) return total;
-    return 0;
+    if (total < 31) return 0; // No tiene juego
+    if (total === 31) return 1000; // Mejor juego posible
+    if (total === 32) return 999;  // Segundo mejor
+    if (total === 40) return 998;  // Tercero (salta a 40)
+    if (total >= 37 && total <= 39) return 1001 - total; // 39, 38, 37
+    if (total >= 33 && total <= 36) return 1040 - total; // 36, 35, 34, 33
+    return total; // Otros casos
   }
 
   nextPhase(): void {
@@ -363,14 +381,30 @@ export class MusGameEngine {
       currentIndex++;
       const nextPhase = phases[currentIndex];
       
-      if (nextPhase === 'pares' && !this.state.players.some(p => p.hasPares)) {
-        continue;
+      // Verificar si la fase es aplicable
+      if (nextPhase === 'pares') {
+        // Solo si hay jugadores con pares
+        if (!this.state.players.some(p => p.hasPares)) {
+          continue;
+        }
+        // Los jugadores deben declarar si tienen pares
+        this.announcePlayersWithPares();
       }
-      if (nextPhase === 'juego' && !this.state.players.some(p => p.hasJuego)) {
-        continue;
+      
+      if (nextPhase === 'juego') {
+        // Solo si hay jugadores con juego
+        if (!this.state.players.some(p => p.hasJuego)) {
+          continue;
+        }
+        // Los jugadores deben declarar si tienen juego
+        this.announcePlayersWithJuego();
       }
-      if (nextPhase === 'punto' && this.state.players.some(p => p.hasJuego)) {
-        continue;
+      
+      if (nextPhase === 'punto') {
+        // Solo si NO hay jugadores con juego
+        if (this.state.players.some(p => p.hasJuego)) {
+          continue;
+        }
       }
       
       this.state.phase = nextPhase as any;
@@ -387,6 +421,26 @@ export class MusGameEngine {
     
     // No quedan más fases, terminar la mano
     this.finishHand();
+  }
+
+  private announcePlayersWithPares(): void {
+    this.state.players.forEach(player => {
+      if (player.hasPares) {
+        this.addDialogue(player.id, 'Pares', 'announce-pares');
+      } else {
+        this.addDialogue(player.id, 'No pares', 'announce-no-pares');
+      }
+    });
+  }
+
+  private announcePlayersWithJuego(): void {
+    this.state.players.forEach(player => {
+      if (player.hasJuego) {
+        this.addDialogue(player.id, 'Juego', 'announce-juego');
+      } else {
+        this.addDialogue(player.id, 'No juego', 'announce-no-juego');
+      }
+    });
   }
 
   private finishHand(): void {
@@ -409,21 +463,93 @@ export class MusGameEngine {
   }
 
   private resolveAllBets(): void {
-    // Resolver todas las fases que tuvieron apuestas aceptadas
+    // Resolver fases automáticamente si nadie apostó
     const phases = ['grande', 'chica', 'pares', 'juego', 'punto'];
     
     phases.forEach(phase => {
-      const phaseBets = this.state.betHistory.filter(bet => 
-        bet.type === 'quiero' && this.getPhaseForBet(bet) === phase
-      );
-      
-      if (phaseBets.length > 0) {
+      const phaseHadActivity = this.state.roundResults.some(r => r.phase === phase);
+      if (!phaseHadActivity) {
+        // Nadie apostó en esta fase, dar 1 piedra al mejor
+        const tempPhase = this.state.phase;
+        this.state.phase = phase as any;
         const winner = this.determinePhaseWinner();
+        this.state.phase = tempPhase;
+        
         if (winner) {
-          this.addPoints(winner, this.state.currentBet, `${phase} ganado`);
+          let points = 1;
+          // Puntos especiales según la fase
+          if (phase === 'pares') {
+            const teamABest = this.getBestParesForTeam('A');
+            const teamBBest = this.getBestParesForTeam('B');
+            if (teamABest.type === 'duples' || teamBBest.type === 'duples') points = 3;
+            else if (teamABest.type === 'medias' || teamBBest.type === 'medias') points = 2;
+          } else if (phase === 'juego') {
+            points = 2; // Juego básico
+            // Si es juego de 31, son 3 puntos
+            const teamAHas31 = this.teamHasJuego31('A');
+            const teamBHas31 = this.teamHasJuego31('B');
+            if (teamAHas31 || teamBHas31) points = 3;
+          }
+          
+          this.addPoints(winner, points, `${phase} en paso`);
+          this.state.roundResults.push({
+            phase,
+            winner,
+            points,
+            details: `${phase} ganado automáticamente`,
+            isDeje: false
+          });
         }
       }
     });
+  }
+
+  private getBestParesForTeam(team: 'A' | 'B'): { type: string, value: number } {
+    const teamPlayers = this.state.players.filter(p => p.team === team && p.hasPares);
+    let bestType = 'none';
+    let bestValue = 0;
+    
+    teamPlayers.forEach(player => {
+      const values = player.hand.map(c => c.musValue);
+      const counts = values.reduce((acc, val) => {
+        acc[val] = (acc[val] || 0) + 1;
+        return acc;
+      }, {} as Record<number, number>);
+      
+      const pairs = Object.entries(counts).filter(([_, count]) => count >= 2);
+      
+      for (const [value, count] of pairs) {
+        const cardValue = parseInt(value);
+        if (count === 4) {
+          bestType = 'duples';
+          bestValue = Math.max(bestValue, cardValue);
+        } else if (count === 3 && bestType !== 'duples') {
+          bestType = 'medias';
+          bestValue = Math.max(bestValue, cardValue);
+        } else if (count === 2 && !['duples', 'medias'].includes(bestType)) {
+          bestType = 'pares';
+          bestValue = Math.max(bestValue, cardValue);
+        }
+      }
+      
+      // Duples especiales (dos pares)
+      if (pairs.length === 2 && pairs.every(([_, count]) => count === 2)) {
+        bestType = 'duples';
+        const values = pairs.map(([v, _]) => parseInt(v));
+        bestValue = Math.max(...values);
+      }
+    });
+    
+    return { type: bestType, value: bestValue };
+  }
+
+  private teamHasJuego31(team: 'A' | 'B'): boolean {
+    return this.state.players
+      .filter(p => p.team === team)
+      .some(p => {
+        const total = p.hand.reduce((sum, card) => sum + card.musValue, 0);
+        return total === 31;
+      });
   }
 
   private getPhaseForBet(bet: BetAction): string {
@@ -485,7 +611,12 @@ export class MusGameEngine {
     try {
       if (this.state.subPhase === 'mus-decision') {
         const decision = bot.decideMus();
+        const phrase = bot.getBotPhrase(decision === 'mus' ? 'mus' : 'no-mus');
+        
         setTimeout(() => {
+          if (phrase) {
+            this.addDialogue(currentPlayer.id, phrase, decision);
+          }
           this.processMusDecision(currentPlayer.id, decision);
         }, 1500);
       } else if (this.state.subPhase === 'discarding') {
@@ -495,7 +626,12 @@ export class MusGameEngine {
         }, 2000);
       } else if (this.state.subPhase === 'betting') {
         const bet = bot.decideBet(this.state.phase, this.state.currentBet, this.state.waitingForResponse);
+        const phrase = bot.getBotPhrase('bet');
+        
         setTimeout(() => {
+          if (phrase) {
+            this.addDialogue(currentPlayer.id, phrase, bet.type);
+          }
           this.placeBet(currentPlayer.id, bet);
         }, 1800);
       }
@@ -504,6 +640,8 @@ export class MusGameEngine {
       // Fallback: hacer que el bot pase
       if (this.state.subPhase === 'betting') {
         this.placeBet(currentPlayer.id, { type: 'paso', playerId: currentPlayer.id });
+      } else if (this.state.subPhase === 'mus-decision') {
+        this.processMusDecision(currentPlayer.id, 'paso' as any);
       }
     }
   }

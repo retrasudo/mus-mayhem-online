@@ -24,11 +24,11 @@ const GameTable = () => {
     if (gameEngine && gameState) {
       const interval = setInterval(() => {
         const currentPlayer = gameState.players.find(p => p.id === gameState.currentPlayer);
-        if (currentPlayer?.isBot) {
+        if (currentPlayer?.isBot && gameState.phase !== 'finished') {
           gameEngine.processBotActions();
           setGameState({ ...gameEngine.getState() });
         }
-      }, 1000);
+      }, 2000); // Aumentado a 2 segundos para mejor legibilidad
 
       return () => clearInterval(interval);
     }
@@ -207,6 +207,7 @@ const GameTable = () => {
             <Card className="bg-black/80 backdrop-blur-sm p-3 text-white">
               <div className="text-sm space-y-1">
                 <div>Fase: {getPhaseDisplayName(gameState.phase)}</div>
+                <div>Subfase: {gameState.subPhase}</div>
                 {gameState.currentBet > 0 && (
                   <div>Apuesta: {gameState.currentBet} piedras</div>
                 )}
@@ -214,6 +215,11 @@ const GameTable = () => {
                   <div className="text-blue-400">
                     <Eye className="w-3 h-3 inline mr-1" />
                     Señas: {gameState.companionSignal}
+                  </div>
+                )}
+                {gameState.waitingForResponse && (
+                  <div className="text-yellow-400 text-xs">
+                    ⏳ Esperando respuesta
                   </div>
                 )}
               </div>
@@ -246,19 +252,34 @@ const GameTable = () => {
 
           {/* Center Table Area */}
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-            <div className="w-64 h-40 bg-green-600/40 rounded-xl border-4 border-yellow-400/60 flex items-center justify-center backdrop-blur-sm">
-              <div className="text-center text-white">
-                <div className="text-xl font-semibold mb-2">
-                  {getPhaseDisplayName(gameState.phase)}
+            <div className="w-80 h-48 bg-gradient-to-br from-green-600/40 via-green-500/30 to-green-700/40 rounded-xl border-4 border-yellow-400/60 flex items-center justify-center backdrop-blur-sm shadow-2xl">
+              <div className="text-center text-white p-4">
+                <div className="text-2xl font-bold mb-3 text-yellow-100">
+                  🃏 {getPhaseDisplayName(gameState.phase)} 🃏
                 </div>
+                {gameState.subPhase === 'mus-decision' && (
+                  <div className="text-sm opacity-90 mb-2">
+                    Decisión de Mus
+                  </div>
+                )}
+                {gameState.subPhase === 'discarding' && (
+                  <div className="text-sm opacity-90 mb-2">
+                    Fase de Descarte
+                  </div>
+                )}
                 {gameState.currentBet > 0 && (
-                  <div className="text-sm opacity-75 mb-2">
-                    Apuesta: {gameState.currentBet} piedras
+                  <div className="text-lg font-semibold mb-2 text-yellow-200">
+                    💰 Apuesta: {gameState.currentBet} piedras
                   </div>
                 )}
                 {gameState.waitingForResponse && (
-                  <div className="text-xs bg-yellow-500/30 rounded px-2 py-1">
-                    Esperando respuesta...
+                  <div className="text-sm bg-yellow-500/40 rounded-full px-3 py-1 border border-yellow-300/50">
+                    ⏳ Esperando respuesta...
+                  </div>
+                )}
+                {currentPlayer && (
+                  <div className="text-xs mt-2 opacity-75">
+                    Turno de: {currentPlayer.name}
                   </div>
                 )}
               </div>

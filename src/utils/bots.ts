@@ -25,12 +25,12 @@ export const BOT_STATS: Record<string, BotStats> = {
   },
   'La Zaray': {
     osadia: 9,
-    faroleo: 7,
+    faroleo: 8,
     suerte: 6,
     cortarMus: 4,
     cazarSenas: 5,
     pensarAntes: 4,
-    limpieza: 2,
+    limpieza: 2, // Baja limpieza = hace trampas
     juegaGPJ: 7,
     juegaChica: 4
   },
@@ -105,10 +105,10 @@ export const BOT_STATS: Record<string, BotStats> = {
 export const BOT_CHARACTERS = [
   { id: 'chigga', name: 'Chigga', avatar: '🐵', phrase: '"Unga unga mus"' },
   { id: 'xose', name: 'Xosé Roberto', avatar: '🧓🏻', phrase: '"¡Caldereta pura!"' },
-  { id: 'zaray', name: 'La Zaray', avatar: '👩‍🦱', phrase: '"Yo gano siempre"' },
+  { id: 'zaray', name: 'La Zaray', avatar: '🔮', phrase: '"Yo gano siempre"' },
   { id: 'pato', name: 'Pato', avatar: '🦆', phrase: '"Quack quack"' },
-  { id: 'duende', name: 'Duende Verde', avatar: '🍀', phrase: '"Hmm... Pares, quizás"' },
-  { id: 'judio', name: 'Judío', avatar: '✡️', phrase: '"Estas cartas me las prometió Dios"' },
+  { id: 'duende', name: 'Duende Verde', avatar: '🍀', phrase: '"El bosque me lo dice..."' },
+  { id: 'judio', name: 'Judío', avatar: '✡️', phrase: '"Estas cartas fueron escritas hace 6000 años"' },
   { id: 'vasco', name: 'Vasco', avatar: '🧔', phrase: '"¡Órdago!"' },
   { id: 'policia', name: 'Policía', avatar: '👮‍♂️', phrase: '"¡Señor mono, está arrestado!"' },
   { id: 'evaristo', name: 'Evaristo', avatar: '👴', phrase: '"Llevo jugando desde Franco..."' }
@@ -126,11 +126,31 @@ export class MusBot {
       return Math.random() > 0.5 ? 'mus' : 'no-mus';
     }
     
+    // Evaluar mano actual
+    const handStrength = this.evaluateGeneralStrength();
+    const hasGoodPairs = this.evaluatePares() > 3;
+    const hasGoodJuego = this.evaluateJuego() > 5;
+    const hasGoodGrande = this.evaluateHand('grande') > 8;
+    const hasGoodChica = this.evaluateHand('chica') > 8;
+    
+    // Si tiene una mano muy buena, cortar mus
+    if (hasGoodPairs || hasGoodJuego || (hasGoodGrande && hasGoodChica)) {
+      return 'no-mus';
+    }
+    
     // Lógica de cortar mus basada en estadísticas
     if (cortarMus >= 8) return 'no-mus';
     
-    const handStrength = this.evaluateGeneralStrength();
     if (cortarMus >= 5 && handStrength > 6) return 'no-mus';
+    
+    // Personajes específicos
+    if (this.player.name === 'Xosé Roberto' && cortarMus >= 7) {
+      return 'no-mus'; // Gallego prudente
+    }
+    
+    if (this.player.name === 'Vasco' && stats.osadia >= 8) {
+      return Math.random() > 0.3 ? 'no-mus' : 'mus'; // Más propenso a cortar por osadía
+    }
     
     return 'mus';
   }
@@ -153,21 +173,51 @@ export class MusBot {
     
     // Personalidades específicas
     if (this.player.name === 'Pato') {
-      const options = ['paso', 'envido'] as const;
+      const options = ['paso', 'envido', 'ordago'] as const;
       const choice = options[Math.floor(Math.random() * options.length)];
       return { type: choice, playerId: this.player.id, amount: choice === 'envido' ? 2 : undefined };
     }
     
     if (this.player.name === 'Vasco' && stats.osadia >= 8) {
-      if (handValue > 3) {
+      if (handValue > 3 && Math.random() < 0.7) {
         return { type: 'ordago', playerId: this.player.id };
       }
     }
     
+    if (this.player.name === 'La Zaray' && stats.faroleo >= 7) {
+      // La Zaray puede intentar hacer trampas o farolear
+      if (Math.random() < 0.3) {
+        handValue += 3; // Faroleo
+      }
+    }
+    
+    if (this.player.name === 'Judío' && stats.suerte >= 8) {
+      // El Judío confía en la providencia
+      if (handValue > 4) {
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+    }
+    
+    // Chigga es agresivo pero impredecible
+    if (this.player.name === 'Chigga' && stats.osadia >= 7) {
+      if (handValue > 2 && Math.random() < 0.4) {
+        return { type: 'ordago', playerId: this.player.id };
+      }
+    }
+    
+    // Xosé Roberto es más calculador
+    if (this.player.name === 'Xosé Roberto' && stats.pensarAntes >= 8) {
+      if (handValue < 5) {
+        return { type: 'paso', playerId: this.player.id };
+      }
+    }
+    
     // Lógica general de apuestas
-    if (handValue >= 8) {
+    if (handValue >= 9) {
       return { type: 'ordago', playerId: this.player.id };
-    } else if (handValue >= 5) {
+    } else if (handValue >= 6) {
+      return { type: 'envido', playerId: this.player.id, amount: 2 };
+    } else if (handValue >= 3) {
       return { type: 'envido', playerId: this.player.id, amount: 2 };
     } else {
       return { type: 'paso', playerId: this.player.id };
@@ -321,28 +371,75 @@ export class MusBot {
     const phrases: Record<string, Record<string, string[]>> = {
       'Chigga': {
         mus: ['Unga unga... mus', 'Unga unga mus'],
-        bet: ['Unga unga... órdago', 'Unga unga envido'],
+        'no-mus': ['Unga unga NO mus!', 'UNGA! No mus'],
+        bet: ['Unga unga... órdago', 'Unga unga envido', 'UNGA PASO'],
+        pares: ['Unga unga pares!', 'Unga... no pares'],
+        juego: ['UNGA JUEGO!', 'Unga no juego'],
         win: ['Unga unga! ¡Gano!']
       },
       'Xosé Roberto': {
-        mus: ['¡Esto es caldereta pura!', 'A la mano con un pimiento'],
-        bet: ['¡Que venga el órdago!', 'Te lo firmo en Pascal'],
+        mus: ['¡Caldereta pura, mus!', 'A la man con un pimiento'],
+        'no-mus': ['¡No hay mus, rapaz!', '¡Corto como el bacalao!'],
+        bet: ['¡Que venga el órdago!', 'Te lo firmo en Pascal', '¡Envido dos!', 'Paso, hijo'],
+        pares: ['¡Pares de caldereta!', 'Sin pares, rapaz'],
+        juego: ['¡Juego de gallego!', 'No hay juego aquí'],
         win: ['¡Caldereta pura, rapaz!']
       },
       'La Zaray': {
-        mus: ['¡Eso no lo he dicho!', 'Niño, yo no he querido mus'],
-        bet: ['Yo gano aunque no gane', '¡Envido, shur!'],
+        mus: ['¡Mus, cariño!', 'Yo quiero mus'],
+        'no-mus': ['¡No hay mus, niño!', '¡Que no, que no hay mus!'],
+        bet: ['Yo gano aunque no gane', '¡Envido, shur!', '¡Órdago!', 'Paso, mi amor'],
+        pares: ['¡Pares, por supuesto!', 'Ay, no tengo pares'],
+        juego: ['¡Juego perfecto!', 'No hay juego, tesoro'],
         win: ['¡Ya te dije que gano siempre!']
       },
       'Pato': {
         mus: ['Quack quack', 'Quack... mus?'],
-        bet: ['Quack quack... órdago', 'Quack'],
+        'no-mus': ['QUACK! No mus', 'Quack quack NO'],
+        bet: ['Quack quack... órdago', 'Quack envido', 'Quack paso'],
+        pares: ['Quack pares!', 'Quack... no pares'],
+        juego: ['QUACK JUEGO!', 'Quack no juego'],
         win: ['Quack quack!']
+      },
+      'Duende Verde': {
+        mus: ['El bosque dice mus...', 'La naturaleza quiere mus'],
+        'no-mus': ['Los árboles dicen no mus', 'El viento corta el mus'],
+        bet: ['El destino dice órdago', 'Envido por la magia', 'Paso como la brisa'],
+        pares: ['Pares del bosque', 'Sin pares naturales'],
+        juego: ['Juego mágico', 'No hay magia para juego'],
+        win: ['¡La naturaleza gana!']
+      },
+      'Judío': {
+        mus: ['Dios quiere mus', 'Está escrito que mus'],
+        'no-mus': ['Las tablas dicen no mus', 'Yahvé corta el mus'],
+        bet: ['¡Órdago divino!', 'Envido prometido', 'Paso como Moisés'],
+        pares: ['Pares benditos', 'Sin pares prometidos'],
+        juego: ['¡Juego del Altísimo!', 'No hay juego divino'],
+        win: ['¡Dios lo había escrito!']
+      },
+      'Vasco': {
+        mus: ['¡Mus, aupa!', 'Euskera mus'],
+        'no-mus': ['¡Ez mus!', '¡No hay mus, aupa!'],
+        bet: ['¡ÓRDAGO VASCO!', '¡Envido fuerte!', 'Paso vasco'],
+        pares: ['¡Pares euskera!', 'Sin pares vascas'],
+        juego: ['¡Juego de Euskadi!', 'No hay juego vasco'],
+        win: ['¡Aupa! ¡Ganamos!']
       }
     };
     
     const playerPhrases = phrases[this.player.name];
-    if (!playerPhrases) return '';
+    if (!playerPhrases) {
+      // Frases genéricas para personajes sin diálogos específicos
+      const generic: Record<string, string[]> = {
+        mus: ['Mus', 'Quiero mus'],
+        'no-mus': ['No hay mus', 'Corto el mus'],
+        bet: ['Envido', 'Paso', 'Órdago'],
+        pares: ['Pares', 'No pares'],
+        juego: ['Juego', 'No juego']
+      };
+      const actionPhrases = generic[action];
+      return actionPhrases ? actionPhrases[Math.floor(Math.random() * actionPhrases.length)] : '';
+    }
     
     const actionPhrases = playerPhrases[action];
     if (!actionPhrases) return '';
