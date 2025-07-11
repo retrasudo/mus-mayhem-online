@@ -25,6 +25,8 @@ export class MusGameEngine {
       teamBScore: 0,
       teamAAmarracos: 0,
       teamBAmarracos: 0,
+      teamAVacas: 0,
+      teamBVacas: 0,
       players,
       deck: createDeck(),
       musCount: 0,
@@ -34,7 +36,9 @@ export class MusGameEngine {
       dialogues: [],
       senasEnabled: true,
       waitingForResponse: false,
-      adentro: false
+      adentro: false,
+      showingCards: false,
+      gameEnded: false
     };
   }
 
@@ -196,26 +200,57 @@ export class MusGameEngine {
   }
 
   private handleNoQuiero(): void {
-    // El equipo que apostó gana 1 piedra (deje)
-    const betPlayer = this.state.players.find(p => p.id === this.state.lastBetPlayer);
-    if (betPlayer) {
-      ScoringSystem.addPoints(this.state, betPlayer.team, 1, 'deje');
-      this.addDialogue('system', `Equipo ${betPlayer.team} gana 1 piedra por deje`, 'scoring');
+    if (this.state.currentBetType === 'ordago') {
+      // Órdago no aceptado - el que apostó gana 1 piedra
+      const betPlayer = this.state.players.find(p => p.id === this.state.lastBetPlayer);
+      if (betPlayer) {
+        ScoringSystem.addPoints(this.state, betPlayer.team, 1, 'deje por órdago');
+        this.addDialogue('system', `Equipo ${betPlayer.team} gana 1 piedra por deje`, 'scoring');
+      }
+      PhaseManager.nextPhase(this.state);
+    } else {
+      // Envido no aceptado
+      const betPlayer = this.state.players.find(p => p.id === this.state.lastBetPlayer);
+      if (betPlayer) {
+        ScoringSystem.addPoints(this.state, betPlayer.team, 1, 'deje');
+        this.addDialogue('system', `Equipo ${betPlayer.team} gana 1 piedra por deje`, 'scoring');
+      }
+      PhaseManager.nextPhase(this.state);
     }
-    PhaseManager.nextPhase(this.state);
   }
 
   private resolveOrdago(): void {
+    // Mostrar todas las cartas primero
+    this.state.showingCards = true;
+    this.addDialogue('system', '¡Órdago aceptado! Mostrando cartas...', 'system');
+    
+    // Mostrar las cartas de todos los jugadores
+    this.state.players.forEach(player => {
+      const cardsText = player.hand.map(c => `${c.name}`).join(', ');
+      this.addDialogue(player.id, `Mis cartas: ${cardsText}`, 'reveal-cards');
+    });
+    
     const winner = ScoringSystem.determinePhaseWinner(this.state);
     if (winner) {
       // El ganador del órdago gana toda la partida
       if (winner === 'A') {
         this.state.teamAAmarracos = 8;
+        this.state.teamAVacas++;
       } else {
         this.state.teamBAmarracos = 8;
+        this.state.teamBVacas++;
       }
-      this.state.phase = 'finished';
+      
       this.addDialogue('system', `¡Equipo ${winner} gana la partida por órdago!`, 'game-end');
+      
+      // Verificar si algún equipo ha ganado 3 vacas
+      if (this.state.teamAVacas >= 3 || this.state.teamBVacas >= 3) {
+        this.state.gameEnded = true;
+        const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
+        this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
+      }
+      
+      this.state.phase = 'finished';
     }
   }
 
@@ -262,9 +297,18 @@ export class MusGameEngine {
     const gameEnded = ScoringSystem.checkGameEnd(this.state);
     if (gameEnded) {
       if (this.state.teamAAmarracos >= 8) {
+        this.state.teamAVacas++;
         this.addDialogue('system', '¡Equipo A gana la partida!', 'game-end');
       } else if (this.state.teamBAmarracos >= 8) {
+        this.state.teamBVacas++;
         this.addDialogue('system', '¡Equipo B gana la partida!', 'game-end');
+      }
+      
+      // Verificar si algún equipo ha ganado 3 vacas
+      if (this.state.teamAVacas >= 3 || this.state.teamBVacas >= 3) {
+        this.state.gameEnded = true;
+        const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
+        this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
       }
     }
     
@@ -275,6 +319,20 @@ export class MusGameEngine {
         this.dealNewRound();
       }
     }, 3000);
+  }
+
+  resetToNewGame(): void {
+    // Resetear solo amarracos y piedras, mantener vacas
+    this.state.teamAScore = 0;
+    this.state.teamBScore = 0;
+    this.state.teamAAmarracos = 0;
+    this.state.teamBAmarracos = 0;
+    this.state.currentRound = 1;
+    this.state.phase = 'mus';
+    this.state.subPhase = 'dealing';
+    this.state.showingCards = false;
+    this.state.adentro = false;
+    this.dealNewRound();
   }
 
   processBotActions(): void {

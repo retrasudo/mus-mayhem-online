@@ -15,20 +15,20 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
   const getPositionStyles = () => {
     switch (player.position) {
       case 'bottom':
-        return 'bottom-32 left-1/2 transform -translate-x-1/2';
+        return 'bottom-36 left-1/2 transform -translate-x-1/2';
       case 'left':
-        return 'left-8 top-1/2 transform -translate-y-1/2';
+        return 'left-2 top-1/3 transform -translate-y-1/2';
       case 'top':
-        return 'top-20 left-1/2 transform -translate-x-1/2';
+        return 'top-24 left-1/2 transform -translate-x-1/2';
       case 'right':
-        return 'right-8 top-1/2 transform -translate-y-1/2';
+        return 'right-2 top-1/3 transform -translate-y-1/2';
       default:
         return '';
     }
   };
 
   const getTeamColor = () => {
-    return player.team === 'A' ? 'bg-blue-500' : 'bg-red-500';
+    return player.team === 'A' ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-red-500 to-red-600';
   };
 
   const getBotPhrase = () => {
@@ -49,32 +49,32 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
   return (
     <div className={`absolute ${getPositionStyles()}`}>
       <Card className={`
-        p-3 bg-white/90 backdrop-blur-sm border-2 transition-all duration-300
-        ${isCurrentPlayer ? 'border-yellow-400 shadow-lg shadow-yellow-400/50' : 'border-gray-300'}
-        ${isUserPlayer ? 'border-green-400' : ''}
+        p-2 bg-white/95 backdrop-blur-sm border-2 transition-all duration-300 shadow-lg
+        ${isCurrentPlayer ? 'border-yellow-400 shadow-lg shadow-yellow-400/50 scale-105' : 'border-gray-300'}
+        ${isUserPlayer ? 'border-green-400 shadow-green-400/30' : ''}
       `}>
-        <div className="flex flex-col items-center gap-2 min-w-[100px]">
+        <div className="flex flex-col items-center gap-1 min-w-[90px]">
           {/* Avatar */}
           <div className="relative">
-            <div className="text-4xl">{player.avatar}</div>
+            <div className="text-3xl">{player.avatar}</div>
             {isCurrentPlayer && (
-              <div className="absolute -top-2 -right-2">
-                <Crown className="w-6 h-6 text-yellow-500 animate-pulse" />
+              <div className="absolute -top-1 -right-1">
+                <Crown className="w-5 h-5 text-yellow-500 animate-pulse drop-shadow-lg" />
               </div>
             )}
             {player.isBot && (
               <div className="absolute -bottom-1 -right-1">
-                <Bot className="w-4 h-4 text-gray-600" />
+                <Bot className="w-3 h-3 text-gray-600" />
               </div>
             )}
           </div>
           
           {/* Name */}
           <div className="text-center">
-            <div className="font-semibold text-sm">{player.name}</div>
+            <div className="font-semibold text-xs">{player.name}</div>
             <Badge 
               variant="secondary" 
-              className={`text-xs text-white ${getTeamColor()}`}
+              className={`text-xs text-white ${getTeamColor()} px-2 py-1 shadow-md`}
             >
               Equipo {player.team}
             </Badge>
@@ -82,11 +82,11 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
           
           {/* Cards indicator for other players */}
           {!isUserPlayer && (
-            <div className="flex gap-1">
+            <div className="flex gap-1 mt-1">
               {player.hand.map((_, cardIndex) => (
                 <div
                   key={cardIndex}
-                  className="w-3 h-4 bg-blue-600 rounded-sm border border-white"
+                  className="w-2 h-3 bg-gradient-to-b from-blue-500 to-blue-700 rounded-sm border border-white shadow-sm"
                 />
               ))}
             </div>
@@ -94,16 +94,8 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
           
           {/* Bot status/phrase */}
           {player.isBot && (
-            <div className="text-xs text-gray-600 text-center max-w-[120px] italic">
+            <div className="text-xs text-gray-600 text-center max-w-[100px] italic leading-tight">
               {getBotPhrase()}
-            </div>
-          )}
-
-          {/* Player stats for bots */}
-          {player.isBot && player.stats && (
-            <div className="text-xs text-gray-500 text-center">
-              <div>Osadía: {player.stats.osadia}/10</div>
-              <div>Faroleo: {player.stats.faroleo}/10</div>
             </div>
           )}
         </div>

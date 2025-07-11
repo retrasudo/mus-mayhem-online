@@ -53,6 +53,8 @@ export interface GameState {
   teamBScore: number;
   teamAAmarracos: number;
   teamBAmarracos: number;
+  teamAVacas: number; // Contador de vacas (partidas ganadas)
+  teamBVacas: number;
   players: Player[];
   deck: Card[];
   musCount: number;
@@ -66,6 +68,8 @@ export interface GameState {
   lastBetPlayer?: string;
   phaseWinner?: string;
   adentro: boolean; // Cuando una pareja está cerca de ganar
+  showingCards?: boolean; // Para mostrar cartas al final del órdago
+  gameEnded?: boolean; // Fin del torneo de 3 vacas
 }
 
 export interface BetAction {

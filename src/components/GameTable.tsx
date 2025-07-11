@@ -175,26 +175,28 @@ const GameTable = () => {
         {/* Game Table */}
         <div className="flex-1 relative">
           {/* Score Board - Top left */}
-          <div className="absolute top-6 left-6 z-20">
-            <Card className="bg-white/95 backdrop-blur-sm p-4 shadow-lg">
+          <div className="absolute top-4 left-4 z-20">
+            <Card className="bg-white/95 backdrop-blur-sm p-3 shadow-lg">
               <div className="text-center">
-                <div className="text-lg font-bold mb-2">Puntuación</div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="text-sm font-bold mb-2">Puntuación</div>
+                <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="text-center">
-                    <div className="w-4 h-4 bg-blue-500 rounded-full mx-auto mb-1"></div>
-                    <div className="font-bold">Equipo A</div>
+                    <div className="w-3 h-3 bg-blue-500 rounded-full mx-auto mb-1"></div>
+                    <div className="font-bold text-xs">Equipo A</div>
+                    <div className="text-xs">{gameState.teamAVacas} vacas</div>
                     <div className="text-xs">{gameState.teamAAmarracos} amarracos</div>
                     <div className="text-xs">{gameState.teamAScore} piedras</div>
                   </div>
                   <div className="text-center">
-                    <div className="w-4 h-4 bg-red-500 rounded-full mx-auto mb-1"></div>
-                    <div className="font-bold">Equipo B</div>
+                    <div className="w-3 h-3 bg-red-500 rounded-full mx-auto mb-1"></div>
+                    <div className="font-bold text-xs">Equipo B</div>
+                    <div className="text-xs">{gameState.teamBVacas} vacas</div>
                     <div className="text-xs">{gameState.teamBAmarracos} amarracos</div>
                     <div className="text-xs">{gameState.teamBScore} piedras</div>
                   </div>
                 </div>
                 {gameState.adentro && (
-                  <div className="mt-2 text-red-600 font-bold text-sm">
+                  <div className="mt-1 text-red-600 font-bold text-xs">
                     ¡ADENTRO!
                   </div>
                 )}
@@ -203,23 +205,23 @@ const GameTable = () => {
           </div>
 
           {/* Game Info - Top right */}
-          <div className="absolute top-6 right-6 z-20">
-            <Card className="bg-black/80 backdrop-blur-sm p-3 text-white">
-              <div className="text-sm space-y-1">
+          <div className="absolute top-4 right-4 z-20">
+            <Card className="bg-black/80 backdrop-blur-sm p-2 text-white">
+              <div className="text-xs space-y-1">
                 <div>Fase: {getPhaseDisplayName(gameState.phase)}</div>
-                <div>Subfase: {gameState.subPhase}</div>
+                <div>Sub: {gameState.subPhase}</div>
                 {gameState.currentBet > 0 && (
-                  <div>Apuesta: {gameState.currentBet} piedras</div>
+                  <div>💰 {gameState.currentBet}</div>
                 )}
                 {gameState.companionSignal && (
                   <div className="text-blue-400">
                     <Eye className="w-3 h-3 inline mr-1" />
-                    Señas: {gameState.companionSignal}
+                    {gameState.companionSignal}
                   </div>
                 )}
                 {gameState.waitingForResponse && (
                   <div className="text-yellow-400 text-xs">
-                    ⏳ Esperando respuesta
+                    ⏳ Respuesta
                   </div>
                 )}
               </div>
@@ -252,34 +254,34 @@ const GameTable = () => {
 
           {/* Center Table Area */}
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-            <div className="w-80 h-48 bg-gradient-to-br from-green-600/40 via-green-500/30 to-green-700/40 rounded-xl border-4 border-yellow-400/60 flex items-center justify-center backdrop-blur-sm shadow-2xl">
-              <div className="text-center text-white p-4">
-                <div className="text-2xl font-bold mb-3 text-yellow-100">
+            <div className="w-64 h-40 bg-gradient-to-br from-green-600/50 via-green-500/40 to-green-700/50 rounded-xl border-3 border-yellow-400/70 flex items-center justify-center backdrop-blur-sm shadow-2xl">
+              <div className="text-center text-white p-3">
+                <div className="text-xl font-bold mb-2 text-yellow-100">
                   🃏 {getPhaseDisplayName(gameState.phase)} 🃏
                 </div>
                 {gameState.subPhase === 'mus-decision' && (
-                  <div className="text-sm opacity-90 mb-2">
+                  <div className="text-xs opacity-90 mb-1">
                     Decisión de Mus
                   </div>
                 )}
                 {gameState.subPhase === 'discarding' && (
-                  <div className="text-sm opacity-90 mb-2">
+                  <div className="text-xs opacity-90 mb-1">
                     Fase de Descarte
                   </div>
                 )}
                 {gameState.currentBet > 0 && (
-                  <div className="text-lg font-semibold mb-2 text-yellow-200">
+                  <div className="text-sm font-semibold mb-1 text-yellow-200">
                     💰 Apuesta: {gameState.currentBet} piedras
                   </div>
                 )}
                 {gameState.waitingForResponse && (
-                  <div className="text-sm bg-yellow-500/40 rounded-full px-3 py-1 border border-yellow-300/50">
+                  <div className="text-xs bg-yellow-500/40 rounded-full px-2 py-1 border border-yellow-300/50">
                     ⏳ Esperando respuesta...
                   </div>
                 )}
                 {currentPlayer && (
-                  <div className="text-xs mt-2 opacity-75">
-                    Turno de: {currentPlayer.name}
+                  <div className="text-xs mt-1 opacity-75">
+                    Turno: {currentPlayer.name}
                   </div>
                 )}
               </div>
@@ -414,21 +416,71 @@ const GameTable = () => {
       {gameState.phase === 'finished' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="bg-white p-8 text-center max-w-md">
-            <h2 className="text-3xl font-bold mb-4">
-              {gameState.teamAAmarracos >= 8 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
-            </h2>
-            <div className="text-xl mb-4">
-              Puntuación Final: {gameState.teamAAmarracos} - {gameState.teamBAmarracos} amarracos
-            </div>
-            <div className="text-sm mb-4">
-              ({gameState.teamAScore} - {gameState.teamBScore} piedras)
-            </div>
-            <Button
-              onClick={() => setShowCharacterSelection(true)}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Nueva Partida
-            </Button>
+            {gameState.gameEnded ? (
+              <>
+                <h2 className="text-3xl font-bold mb-4">
+                  🏆 {gameState.teamAVacas >= 3 ? '¡Equipo A Gana el Torneo!' : '¡Equipo B Gana el Torneo!'}
+                </h2>
+                <div className="text-xl mb-4">
+                  Vacas: {gameState.teamAVacas} - {gameState.teamBVacas}
+                </div>
+                <div className="text-sm mb-4">
+                  Partida final: {gameState.teamAAmarracos} - {gameState.teamBAmarracos} amarracos
+                </div>
+                <div className="flex gap-3 justify-center">
+                  <Button
+                    onClick={() => setShowCharacterSelection(true)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Menú Principal
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (gameEngine) {
+                        gameEngine.resetToNewGame();
+                        setGameState({ ...gameEngine.getState() });
+                      }
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    Revancha
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold mb-4">
+                  {gameState.teamAAmarracos >= 8 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
+                </h2>
+                <div className="text-xl mb-4">
+                  Vacas: {gameState.teamAVacas} - {gameState.teamBVacas}
+                </div>
+                <div className="text-sm mb-4">
+                  Amarracos: {gameState.teamAAmarracos} - {gameState.teamBAmarracos}
+                </div>
+                {gameState.showingCards && (
+                  <div className="mb-4 text-sm bg-gray-100 p-3 rounded">
+                    <div className="font-bold mb-2">Cartas reveladas:</div>
+                    {gameState.players.map(player => (
+                      <div key={player.id} className="text-xs">
+                        {player.name}: {player.hand.map(c => c.name).join(', ')}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  onClick={() => {
+                    if (gameEngine) {
+                      gameEngine.resetToNewGame();
+                      setGameState({ ...gameEngine.getState() });
+                    }
+                  }}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  Nueva Partida
+                </Button>
+              </>
+            )}
           </Card>
         </div>
       )}
