@@ -51,19 +51,34 @@ export class BettingSystem {
 
   private static handleQuiero(state: GameState): void {
     if (state.currentBetType === 'ordago') {
-      // Órdago aceptado - se decide la partida
-      BettingSystem.resolveOrdago(state);
+      // Órdago aceptado - marcar para mostrar cartas y resolver
+      state.showingCards = true;
+      state.waitingForResponse = false;
     } else {
       // Envido aceptado - continuar a la siguiente fase
-      // Logic handled by game engine
+      state.waitingForResponse = false;
     }
   }
 
   private static handleNoQuiero(state: GameState): void {
-    // El equipo que apostó gana 1 piedra (deje)
-    const betPlayer = state.players.find(p => p.id === state.lastBetPlayer);
-    if (betPlayer) {
-      ScoringSystem.addPoints(state, betPlayer.team, 1, 'deje');
+    if (state.currentBetType === 'ordago') {
+      // Órdago no aceptado - el que apostó gana 1 piedra
+      const betPlayer = state.players.find(p => p.id === state.lastBetPlayer);
+      if (betPlayer) {
+        ScoringSystem.addPoints(state, betPlayer.team, 1, 'deje por órdago');
+      }
+      state.waitingForResponse = false;
+      state.currentBet = 0;
+      state.currentBetType = null;
+    } else {
+      // Envido no aceptado - el que apostó gana 1 piedra
+      const betPlayer = state.players.find(p => p.id === state.lastBetPlayer);
+      if (betPlayer) {
+        ScoringSystem.addPoints(state, betPlayer.team, 1, 'deje');
+      }
+      state.waitingForResponse = false;
+      state.currentBet = 0;
+      state.currentBetType = null;
     }
   }
 
@@ -92,16 +107,25 @@ export class BettingSystem {
     }
   }
 
-  private static resolveOrdago(state: GameState): void {
+  static resolveOrdago(state: GameState): void {
     const winner = ScoringSystem.determinePhaseWinner(state);
     if (winner) {
       // El ganador del órdago gana toda la partida
       if (winner === 'A') {
         state.teamAAmarracos = 8;
+        state.teamAVacas++;
       } else {
         state.teamBAmarracos = 8;
+        state.teamBVacas++;
       }
+      
+      // Verificar si algún equipo ha ganado 3 vacas
+      if (state.teamAVacas >= 3 || state.teamBVacas >= 3) {
+        state.gameEnded = true;
+      }
+      
       state.phase = 'finished';
+      state.showingCards = false;
     }
   }
 

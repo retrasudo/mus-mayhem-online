@@ -191,7 +191,7 @@ export class MusGameEngine {
 
   private handleQuiero(): void {
     if (this.state.currentBetType === 'ordago') {
-      // Órdago aceptado - se decide la partida
+      // Órdago aceptado - mostrar cartas y resolver
       this.resolveOrdago();
     } else {
       // Envido aceptado - continuar a la siguiente fase
@@ -201,12 +201,16 @@ export class MusGameEngine {
 
   private handleNoQuiero(): void {
     if (this.state.currentBetType === 'ordago') {
-      // Órdago no aceptado - el que apostó gana 1 piedra
+      // Órdago no aceptado - el que apostó gana 1 piedra y continuar
       const betPlayer = this.state.players.find(p => p.id === this.state.lastBetPlayer);
       if (betPlayer) {
         ScoringSystem.addPoints(this.state, betPlayer.team, 1, 'deje por órdago');
         this.addDialogue('system', `Equipo ${betPlayer.team} gana 1 piedra por deje`, 'scoring');
       }
+      // Reset betting state and continue to next phase
+      this.state.currentBet = 0;
+      this.state.currentBetType = null;
+      this.state.waitingForResponse = false;
       PhaseManager.nextPhase(this.state);
     } else {
       // Envido no aceptado
@@ -248,6 +252,11 @@ export class MusGameEngine {
         this.state.gameEnded = true;
         const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
         this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
+      } else {
+        // Resetear para nueva partida si no se acabó el torneo
+        setTimeout(() => {
+          this.resetToNewGame();
+        }, 4000);
       }
       
       this.state.phase = 'finished';
