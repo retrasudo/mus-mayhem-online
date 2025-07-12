@@ -513,7 +513,7 @@ const GameTable = () => {
                   <Button
                     onClick={() => {
                       if (gameEngine) {
-                        gameEngine.resetToNewGame();
+                        gameEngine.resetTournament();
                         setGameState({ ...gameEngine.getState() });
                       }
                     }}
@@ -544,7 +544,19 @@ const GameTable = () => {
                   <Button
                     onClick={() => {
                       if (gameEngine) {
-                        gameEngine.resetToNewGame();
+                        // Añadir una vaca al equipo ganador antes de resetear
+                        if (gameState.teamAAmarracos >= 8) {
+                          gameEngine.getState().teamAVacas++;
+                        } else if (gameState.teamBAmarracos >= 8) {
+                          gameEngine.getState().teamBVacas++;
+                        }
+                        
+                        // Verificar si el torneo ha terminado
+                        if (gameEngine.getState().teamAVacas >= 3 || gameEngine.getState().teamBVacas >= 3) {
+                          gameEngine.getState().gameEnded = true;
+                        } else {
+                          gameEngine.resetToNewGame();
+                        }
                         setGameState({ ...gameEngine.getState() });
                       }
                     }}

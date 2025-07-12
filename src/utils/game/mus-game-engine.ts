@@ -252,13 +252,9 @@ export class MusGameEngine {
         this.state.gameEnded = true;
         const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
         this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
-      } else {
-        // Resetear para nueva partida si no se acabó el torneo
-        setTimeout(() => {
-          this.resetToNewGame();
-        }, 4000);
       }
       
+      // Inmediatamente finalizar la partida
       this.state.phase = 'finished';
     }
   }
@@ -341,6 +337,36 @@ export class MusGameEngine {
     this.state.subPhase = 'dealing';
     this.state.showingCards = false;
     this.state.adentro = false;
+    this.state.gameEnded = false;
+    this.state.currentBet = 0;
+    this.state.currentBetType = null;
+    this.state.waitingForResponse = false;
+    this.state.lastBetPlayer = '';
+    this.state.bets = {};
+    this.state.betHistory = [];
+    this.dealNewRound();
+  }
+
+  resetTournament(): void {
+    // Resetear todo incluyendo vacas
+    this.state.teamAScore = 0;
+    this.state.teamBScore = 0;
+    this.state.teamAAmarracos = 0;
+    this.state.teamBAmarracos = 0;
+    this.state.teamAVacas = 0;
+    this.state.teamBVacas = 0;
+    this.state.currentRound = 1;
+    this.state.phase = 'mus';
+    this.state.subPhase = 'dealing';
+    this.state.showingCards = false;
+    this.state.adentro = false;
+    this.state.gameEnded = false;
+    this.state.currentBet = 0;
+    this.state.currentBetType = null;
+    this.state.waitingForResponse = false;
+    this.state.lastBetPlayer = '';
+    this.state.bets = {};
+    this.state.betHistory = [];
     this.dealNewRound();
   }
 
