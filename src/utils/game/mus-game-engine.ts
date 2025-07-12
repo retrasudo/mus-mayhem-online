@@ -191,7 +191,7 @@ export class MusGameEngine {
 
   private handleQuiero(): void {
     if (this.state.currentBetType === 'ordago') {
-      // Órdago aceptado - mostrar cartas y resolver
+      // Órdago aceptado - mostrar cartas y resolver INMEDIATAMENTE
       this.resolveOrdago();
     } else {
       // Envido aceptado - continuar a la siguiente fase
@@ -236,37 +236,48 @@ export class MusGameEngine {
     
     const winner = ScoringSystem.determinePhaseWinner(this.state);
     if (winner) {
-      // El ganador del órdago gana toda la partida
+      // El ganador del órdago gana toda la vaca (partida)
       if (winner === 'A') {
-        this.state.teamAAmarracos = 8;
         this.state.teamAVacas++;
       } else {
-        this.state.teamBAmarracos = 8;
         this.state.teamBVacas++;
       }
       
-      this.addDialogue('system', `¡Equipo ${winner} gana la partida por órdago!`, 'game-end');
+      this.addDialogue('system', `¡Equipo ${winner} gana la vaca por órdago!`, 'game-end');
       
-      // Verificar si algún equipo ha ganado 3 vacas
+      // Verificar si algún equipo ha ganado 3 vacas (torneo)
       if (this.state.teamAVacas >= 3 || this.state.teamBVacas >= 3) {
         this.state.gameEnded = true;
         const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
         this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
       }
       
-      // Inmediatamente finalizar la partida
+      // Finalizar inmediatamente con fase especial para órdago
       this.state.phase = 'finished';
+      this.state.subPhase = 'ordago-resolved';
     }
   }
 
   nextPhase(): void {
     PhaseManager.nextPhase(this.state);
     
-    // Add announcements for special phases
+    // Add announcements for special phases BEFORE betting
     if (this.state.phase === 'pares') {
+      this.state.subPhase = 'announcing';
       this.announcePlayersWithPares();
+      // Cambiar a betting después de los anuncios
+      setTimeout(() => {
+        this.state.subPhase = 'betting';
+        PhaseManager.resetCurrentPlayer(this.state);
+      }, 3000);
     } else if (this.state.phase === 'juego') {
+      this.state.subPhase = 'announcing';
       this.announcePlayersWithJuego();
+      // Cambiar a betting después de los anuncios
+      setTimeout(() => {
+        this.state.subPhase = 'betting';
+        PhaseManager.resetCurrentPlayer(this.state);
+      }, 3000);
     }
     
     // Check if game should finish

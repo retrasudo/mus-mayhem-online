@@ -9,7 +9,18 @@ export class CardEvaluator {
       return acc;
     }, {} as Record<number, number>);
     
-    return Object.values(counts).some(count => count >= 2);
+    // Revisar pares normales (dos cartas del mismo valor)
+    if (Object.values(counts).some(count => count >= 2)) {
+      return true;
+    }
+    
+    // Revisar pares especiales: Rey (12) + 3 = pares, As (11) + 2 = pares
+    const hasRey = values.includes(12);
+    const hasTres = values.includes(3);
+    const hasAs = values.includes(11);
+    const hasDos = values.includes(2);
+    
+    return (hasRey && hasTres) || (hasAs && hasDos);
   }
 
   static checkJuego(hand: Card[]): boolean {

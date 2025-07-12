@@ -43,7 +43,7 @@ export interface GameDialogue {
 
 export interface GameState {
   phase: 'mus' | 'grande' | 'chica' | 'pares' | 'juego' | 'punto' | 'scoring' | 'finished';
-  subPhase: 'dealing' | 'mus-decision' | 'discarding' | 'betting' | 'revealing' | 'next-round';
+  subPhase: 'dealing' | 'mus-decision' | 'discarding' | 'betting' | 'revealing' | 'next-round' | 'announcing' | 'ordago-resolved';
   currentPlayer: string;
   currentRound: number;
   currentBet: number;

@@ -544,25 +544,14 @@ const GameTable = () => {
                   <Button
                     onClick={() => {
                       if (gameEngine) {
-                        // Añadir una vaca al equipo ganador antes de resetear
-                        if (gameState.teamAAmarracos >= 8) {
-                          gameEngine.getState().teamAVacas++;
-                        } else if (gameState.teamBAmarracos >= 8) {
-                          gameEngine.getState().teamBVacas++;
-                        }
-                        
-                        // Verificar si el torneo ha terminado
-                        if (gameEngine.getState().teamAVacas >= 3 || gameEngine.getState().teamBVacas >= 3) {
-                          gameEngine.getState().gameEnded = true;
-                        } else {
-                          gameEngine.resetToNewGame();
-                        }
+                        // Resetear para nueva vaca (partida)
+                        gameEngine.resetToNewGame();
                         setGameState({ ...gameEngine.getState() });
                       }
                     }}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
-                    Nueva Partida
+                    Revancha
                   </Button>
                 </div>
               </>
