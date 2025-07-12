@@ -17,12 +17,6 @@ export class MusBot {
 
   decideMus(): 'mus' | 'no-mus' {
     const stats = this.player.stats!;
-    const cortarMus = stats.cortarMus;
-    
-    // Personalidad específica
-    if (this.player.name === 'Pato') {
-      return Math.random() > 0.5 ? 'mus' : 'no-mus';
-    }
     
     // Evaluar mano actual
     const handStrength = this.handEvaluator.evaluateGeneralStrength();
@@ -31,26 +25,53 @@ export class MusBot {
     const hasGoodGrande = this.handEvaluator.evaluateHand('grande') > 8;
     const hasGoodChica = this.handEvaluator.evaluateHand('chica') > 8;
     
-    // Si tiene una mano muy buena, cortar mus
+    // Personalidades específicas con variabilidad
+    if (this.player.name === 'Pato') {
+      // Pato es muy aleatorio
+      return Math.random() > 0.6 ? 'mus' : 'no-mus';
+    }
+    
+    if (this.player.name === 'Vasco') {
+      // Vasco es osado pero inteligente
+      if (stats.osadia >= 8 && handStrength > 4) {
+        return Math.random() > 0.7 ? 'no-mus' : 'mus';
+      }
+      return Math.random() > 0.4 ? 'mus' : 'no-mus';
+    }
+    
+    if (this.player.name === 'Xosé Roberto') {
+      // Gallego prudente y calculador
+      if (hasGoodPairs || hasGoodJuego) {
+        return 'no-mus';
+      }
+      return Math.random() > 0.8 ? 'no-mus' : 'mus';
+    }
+    
+    if (this.player.name === 'La Zaray') {
+      // La Zaray es impredecible y farolera
+      if (stats.faroleo >= 7) {
+        return Math.random() > 0.5 ? 'no-mus' : 'mus';
+      }
+    }
+    
+    if (this.player.name === 'Chigga') {
+      // Chigga es agresivo
+      if (handStrength > 3) {
+        return Math.random() > 0.6 ? 'no-mus' : 'mus';
+      }
+    }
+    
+    // Si tiene una mano muy buena, tendencia a cortar mus
     if (hasGoodPairs || hasGoodJuego || (hasGoodGrande && hasGoodChica)) {
-      return 'no-mus';
+      return Math.random() > 0.3 ? 'no-mus' : 'mus';
     }
     
-    // Lógica de cortar mus basada en estadísticas
-    if (cortarMus >= 8) return 'no-mus';
+    // Lógica general con variabilidad
+    const cortarMusChance = stats.cortarMus / 10;
+    const handQualityFactor = handStrength / 10;
+    const finalChance = cortarMusChance + handQualityFactor + (Math.random() - 0.5) * 0.4;
     
-    if (cortarMus >= 5 && handStrength > 6) return 'no-mus';
-    
-    // Personajes específicos
-    if (this.player.name === 'Xosé Roberto' && cortarMus >= 7) {
-      return 'no-mus'; // Gallego prudente
-    }
-    
-    if (this.player.name === 'Vasco' && stats.osadia >= 8) {
-      return Math.random() > 0.3 ? 'no-mus' : 'mus'; // Más propenso a cortar por osadía
-    }
-    
-    return 'mus';
+    return finalChance > 0.6 ? 'no-mus' : 'mus';
   }
 
   decideBet(phase: string, currentBet: number, waitingForResponse: boolean): BetAction {
@@ -69,53 +90,89 @@ export class MusBot {
     handValue = this.personalityModifiers.applyBluff(handValue);
     handValue = this.personalityModifiers.applyThinking(handValue);
     
-    // Personalidades específicas
+    // Personalidades específicas con mayor variabilidad
     if (this.player.name === 'Pato') {
-      const options = ['paso', 'envido', 'ordago'] as const;
-      const choice = options[Math.floor(Math.random() * options.length)];
-      return { type: choice, playerId: this.player.id, amount: choice === 'envido' ? 2 : undefined };
+      // Pato es completamente aleatorio
+      const randomChoice = Math.random();
+      if (randomChoice < 0.4) return { type: 'paso', playerId: this.player.id };
+      if (randomChoice < 0.7) return { type: 'envido', playerId: this.player.id, amount: 2 };
+      return { type: 'ordago', playerId: this.player.id };
     }
     
-    if (this.player.name === 'Vasco' && stats.osadia >= 8) {
-      if (handValue > 3 && Math.random() < 0.7) {
+    if (this.player.name === 'Vasco') {
+      // Vasco ama el órdago pero no siempre
+      if (stats.osadia >= 8 && handValue > 4 && Math.random() < 0.4) {
         return { type: 'ordago', playerId: this.player.id };
       }
-    }
-    
-    if (this.player.name === 'La Zaray' && stats.faroleo >= 7) {
-      // La Zaray puede intentar hacer trampas o farolear
-      if (Math.random() < 0.3) {
-        handValue += 3; // Faroleo
-      }
-    }
-    
-    if (this.player.name === 'Judío' && stats.suerte >= 8) {
-      // El Judío confía en la providencia
-      if (handValue > 4) {
+      if (handValue > 5 && Math.random() < 0.6) {
         return { type: 'envido', playerId: this.player.id, amount: 2 };
       }
     }
     
-    // Chigga es agresivo pero impredecible
-    if (this.player.name === 'Chigga' && stats.osadia >= 7) {
-      if (handValue > 2 && Math.random() < 0.4) {
+    if (this.player.name === 'La Zaray') {
+      // La Zaray farolea mucho
+      if (stats.faroleo >= 7 && Math.random() < 0.4) {
+        handValue += 3; // Faroleo boost
+      }
+      if (handValue > 6 && Math.random() < 0.3) {
         return { type: 'ordago', playerId: this.player.id };
       }
     }
     
-    // Xosé Roberto es más calculador
-    if (this.player.name === 'Xosé Roberto' && stats.pensarAntes >= 8) {
-      if (handValue < 5) {
-        return { type: 'paso', playerId: this.player.id };
+    if (this.player.name === 'Judío') {
+      // El Judío es calculador pero optimista
+      if (handValue > 5 && Math.random() < 0.7) {
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+      if (handValue > 7 && Math.random() < 0.3) {
+        return { type: 'ordago', playerId: this.player.id };
       }
     }
     
-    // Lógica general de apuestas
-    if (handValue >= 9) {
+    if (this.player.name === 'Chigga') {
+      // Chigga es agresivo pero inconsistente
+      if (handValue > 3 && Math.random() < 0.5) {
+        const aggressive = Math.random() < 0.6;
+        return aggressive 
+          ? { type: 'ordago', playerId: this.player.id }
+          : { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+    }
+    
+    if (this.player.name === 'Xosé Roberto') {
+      // Xosé Roberto es muy prudente
+      if (handValue < 4) {
+        return { type: 'paso', playerId: this.player.id };
+      }
+      if (handValue > 7 && Math.random() < 0.8) {
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+    }
+    
+    if (this.player.name === 'Duende Verde') {
+      // Duende Verde es misterioso y cambiante
+      const mood = Math.random();
+      if (mood < 0.3) {
+        // Conservador
+        return handValue > 6 ? { type: 'envido', playerId: this.player.id, amount: 2 } : { type: 'paso', playerId: this.player.id };
+      } else if (mood < 0.7) {
+        // Normal
+        if (handValue > 5) return { type: 'envido', playerId: this.player.id, amount: 2 };
+      } else {
+        // Agresivo
+        if (handValue > 4) return { type: 'ordago', playerId: this.player.id };
+      }
+    }
+    
+    // Lógica general con más variabilidad
+    const randomFactor = (Math.random() - 0.5) * 3; // ±1.5 points
+    const adjustedValue = handValue + randomFactor;
+    
+    if (adjustedValue >= 9 && Math.random() < 0.7) {
       return { type: 'ordago', playerId: this.player.id };
-    } else if (handValue >= 6) {
+    } else if (adjustedValue >= 6 && Math.random() < 0.8) {
       return { type: 'envido', playerId: this.player.id, amount: 2 };
-    } else if (handValue >= 3) {
+    } else if (adjustedValue >= 3 && Math.random() < 0.5) {
       return { type: 'envido', playerId: this.player.id, amount: 2 };
     } else {
       return { type: 'paso', playerId: this.player.id };
@@ -126,19 +183,39 @@ export class MusBot {
     const handValue = this.handEvaluator.evaluateHand(phase);
     const stats = this.player.stats!;
     
-    // Aplicar osadía a la decisión
-    const adjustedValue = handValue + (stats.osadia / 10) * 2;
+    // Aplicar personalidad a la respuesta
+    let adjustedValue = handValue;
+    
+    if (this.player.name === 'Vasco') {
+      adjustedValue += stats.osadia / 5; // Vasco más valiente
+    }
+    
+    if (this.player.name === 'La Zaray') {
+      if (Math.random() < 0.3) adjustedValue += 2; // Faroleo ocasional
+    }
+    
+    if (this.player.name === 'Xosé Roberto') {
+      adjustedValue -= 1; // Más conservador
+    }
+    
+    if (this.player.name === 'Pato') {
+      adjustedValue = Math.random() * 10; // Completamente aleatorio
+    }
+    
+    // Añadir factor aleatorio
+    adjustedValue += (Math.random() - 0.5) * 2;
     
     if (currentBet >= 40) {
       // Es un órdago
-      return adjustedValue >= 7 ? 
-        { type: 'quiero', playerId: this.player.id } : 
-        { type: 'no-quiero', playerId: this.player.id };
+      const acceptChance = Math.max(0, Math.min(1, (adjustedValue - 5) / 5));
+      return Math.random() < acceptChance
+        ? { type: 'quiero', playerId: this.player.id } 
+        : { type: 'no-quiero', playerId: this.player.id };
     } else {
       // Es un envido
-      if (adjustedValue >= 8) {
+      if (adjustedValue >= 8 && Math.random() < 0.6) {
         return { type: 'echo-mas', playerId: this.player.id };
-      } else if (adjustedValue >= 5) {
+      } else if (adjustedValue >= 4 && Math.random() < 0.7) {
         return { type: 'quiero', playerId: this.player.id };
       } else {
         return { type: 'no-quiero', playerId: this.player.id };

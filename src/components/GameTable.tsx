@@ -8,7 +8,7 @@ import { GameChat } from './GameChat';
 import { CardHand } from './CardHand';
 import { CharacterSelection } from './CharacterSelection';
 import { DialogueBubble } from './DialogueBubble';
-import { MusGameEngine, BettingSystem } from '@/utils/game';
+import { MusGameEngine } from '@/utils/game';
 import { GameState, Player, BetAction } from '@/types/game';
 
 const GameTable = () => {
@@ -33,15 +33,12 @@ const GameTable = () => {
     }
   }, [gameEngine, gameState?.currentPlayer, gameState?.subPhase]);
 
-  // Auto-resolve órdago when showingCards is true
+  // Auto-update when bot actions complete
   useEffect(() => {
-    if (gameEngine && gameState?.showingCards && gameState.currentBetType === 'ordago') {
-      setTimeout(() => {
-        BettingSystem.resolveOrdago(gameState);
-        setGameState({ ...gameEngine.getState() });
-      }, 3000);
+    if (gameEngine && gameState) {
+      setGameState({ ...gameEngine.getState() });
     }
-  }, [gameEngine, gameState?.showingCards]);
+  }, [gameEngine, gameState?.phase, gameState?.subPhase]);
 
   const handleCharactersSelected = (players: Player[]) => {
     console.log('Iniciando juego con jugadores:', players.map(p => p.name));
@@ -217,13 +214,13 @@ const GameTable = () => {
           </div>
 
           {/* Players positioned around a smaller table */}
-          <div className="absolute inset-4">
+          <div className="absolute inset-6">
             {/* Bottom Player (User) */}
             <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2">
               {gameState.players
                 .filter(p => p.position === 'bottom')
                 .map(player => (
-                  <div key={player.id} className="relative">
+                  <div key={player.id} className="relative mb-4">
                     <PlayerCard
                       player={player}
                       isCurrentPlayer={player.id === gameState.currentPlayer}
@@ -344,9 +341,9 @@ const GameTable = () => {
             </div>
           </div>
 
-          {/* User's Hand - Más compacto */}
+          {/* User's Hand - Más compacto y sin solapar */}
           {userGamePlayer && (
-            <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 z-20">
+            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-20">
               <CardHand 
                 hand={userGamePlayer.hand}
                 gamePhase={gameState.subPhase}

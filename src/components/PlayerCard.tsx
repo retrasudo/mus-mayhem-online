@@ -16,24 +16,9 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
     return player.team === 'A' ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-red-500 to-red-600';
   };
 
-  const getBotPhrase = () => {
-    const phrases: Record<string, string> = {
-      'Chigga': '"Unga unga mus"',
-      'Xosé Roberto': '"¡Caldereta pura!"',
-      'La Zaray': '"Yo gano siempre"',
-      'Pato': '"Quack quack"',
-      'Duende Verde': '"Hmm... Pares, quizás"',
-      'Judío': '"Estas cartas me las prometió Dios"',
-      'Vasco': '"¡Órdago!"',
-      'Policía': '"¡Señor mono, está arrestado!"',
-      'Evaristo': '"Llevo jugando desde Franco..."'
-    };
-    return phrases[player.name] || '';
-  };
-
   const avatarSize = compact ? 'text-2xl' : 'text-3xl';
   const cardSize = compact ? 'w-1.5 h-2' : 'w-2 h-3';
-  const minWidth = compact ? 'min-w-[80px]' : 'min-w-[90px]';
+  const minWidth = compact ? 'min-w-[70px]' : 'min-w-[80px]';
 
   return (
     <Card className={`
@@ -77,34 +62,6 @@ const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentPlayer, isUser
                 className={`${cardSize} bg-gradient-to-b from-blue-500 to-blue-700 rounded-sm border border-white shadow-sm`}
               />
             ))}
-          </div>
-        )}
-        
-        {/* Game Status */}
-        {compact && (
-          <div className="text-xs space-y-0.5 text-center">
-            {player.hasPares && (
-              <div className="bg-green-100 text-green-800 px-1 py-0.5 rounded text-xs">
-                Pares
-              </div>
-            )}
-            {player.hasJuego && (
-              <div className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
-                Juego
-              </div>
-            )}
-            {!player.hasJuego && player.punto && (
-              <div className="bg-gray-100 text-gray-800 px-1 py-0.5 rounded text-xs">
-                {player.punto}pts
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Bot phrase for non-compact mode */}
-        {player.isBot && !compact && (
-          <div className="text-xs text-gray-600 text-center max-w-[100px] italic leading-tight">
-            {getBotPhrase()}
           </div>
         )}
       </div>
