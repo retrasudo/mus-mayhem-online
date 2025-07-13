@@ -19,6 +19,7 @@ export interface Player {
   hasPares?: boolean;
   hasJuego?: boolean;
   punto?: number;
+  hasDiscarded?: boolean;
 }
 
 export interface BotStats {

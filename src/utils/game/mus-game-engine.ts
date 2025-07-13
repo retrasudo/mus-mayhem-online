@@ -100,22 +100,6 @@ export class MusGameEngine {
     console.log('Nueva ronda iniciada. Manos repartidas.');
   }
 
-  // Métodos para manejar el sistema de descartes
-  selectCard(cardIndex: number): void {
-    if (this.state.selectedCards.includes(cardIndex)) {
-      this.state.selectedCards = this.state.selectedCards.filter(i => i !== cardIndex);
-    } else {
-      this.state.selectedCards.push(cardIndex);
-    }
-  }
-
-  confirmDiscard(): void {
-    const userPlayer = this.state.players.find(p => !p.isBot);
-    if (userPlayer && this.state.selectedCards.length > 0) {
-      this.processDiscard(userPlayer.id, this.state.selectedCards);
-      this.state.selectedCards = [];
-    }
-  }
 
   // Método para enviar señales al compañero
   sendCompanionSignal(playerId: string, signal: 'buenas' | 'malas' | 'regulares'): void {
@@ -200,24 +184,34 @@ export class MusGameEngine {
     const player = this.state.players.find(p => p.id === playerId);
     if (!player) return;
 
-    // Descartar cartas seleccionadas
-    cardIndices.sort((a, b) => b - a); // Orden descendente para no afectar indices
-    cardIndices.forEach(index => {
-      if (index >= 0 && index < player.hand.length) {
-        player.hand.splice(index, 1);
+    if (cardIndices.length === 0) {
+      this.addDialogue(playerId, 'No descarta', 'discard');
+    } else {
+      // Descartar cartas seleccionadas
+      cardIndices.sort((a, b) => b - a); // Orden descendente para no afectar indices
+      cardIndices.forEach(index => {
+        if (index >= 0 && index < player.hand.length) {
+          player.hand.splice(index, 1);
+        }
+      });
+
+      // Repartir nuevas cartas del mazo
+      while (player.hand.length < 4 && this.state.deck.length > 0) {
+        const randomIndex = Math.floor(Math.random() * this.state.deck.length);
+        const newCard = this.state.deck.splice(randomIndex, 1)[0];
+        player.hand.push(newCard);
       }
-    });
 
-    // Repartir nuevas cartas
-    const newCards = dealCards(this.state.deck, cardIndices.length).hands[0];
-    player.hand.push(...newCards);
+      // Recalcular estadísticas de la mano
+      player.hasPares = CardEvaluator.checkPares(player.hand);
+      player.hasJuego = CardEvaluator.checkJuego(player.hand);
+      player.punto = CardEvaluator.calculatePunto(player.hand);
 
-    // Recalcular estadísticas de la mano
-    player.hasPares = CardEvaluator.checkPares(player.hand);
-    player.hasJuego = CardEvaluator.checkJuego(player.hand);
-    player.punto = CardEvaluator.calculatePunto(player.hand);
+      this.addDialogue(playerId, `Descarta ${cardIndices.length} carta${cardIndices.length !== 1 ? 's' : ''}`, 'discard');
+    }
 
-    this.addDialogue(playerId, `Descarta ${cardIndices.length} carta${cardIndices.length !== 1 ? 's' : ''}`, 'discard');
+    // Marcar como descartado
+    player.hasDiscarded = true;
 
     // Verificar si todos han descartado
     this.checkAllDiscarded();
@@ -225,10 +219,76 @@ export class MusGameEngine {
 
 
   private checkAllDiscarded(): void {
-    // Simplificado: después del primer descarte, continuar
-    this.state.playersWantingMus = [];
-    this.state.subPhase = 'mus-decision';
-    this.resetCurrentPlayer();
+    const allDiscarded = this.state.players.every(p => p.hasDiscarded);
+    
+    if (allDiscarded) {
+      // Hacer que los bots descarten también
+      this.processBotDiscards();
+      
+      // Reset para nueva ronda de Mus
+      this.state.players.forEach(p => p.hasDiscarded = false);
+      this.state.playersWantingMus = [];
+      this.state.subPhase = 'mus-decision';
+      this.resetCurrentPlayer();
+      this.addDialogue('system', 'Cartas repartidas. Nueva ronda de Mus', 'system');
+      
+      // Procesar decisiones de bots automáticamente
+      setTimeout(() => {
+        this.processBotActions();
+      }, 1000);
+    } else {
+      this.nextPlayer();
+    }
+  }
+
+  private processBotDiscards(): void {
+    this.state.players.filter(p => p.isBot).forEach(player => {
+      if (!player.hasDiscarded) {
+        // Estrategia de descarte simple para bots
+        const cardsToDiscard = this.getBotDiscardStrategy(player);
+        if (cardsToDiscard.length > 0) {
+          this.processDiscard(player.id, cardsToDiscard);
+        } else {
+          player.hasDiscarded = true;
+          this.addDialogue(player.id, 'No descarta', 'discard');
+        }
+      }
+    });
+  }
+
+  private getBotDiscardStrategy(player: Player): number[] {
+    const toDiscard: number[] = [];
+    
+    // Estrategia simple: descartar cartas medias (4-6)
+    player.hand.forEach((card, index) => {
+      if (card.musValue >= 4 && card.musValue <= 6 && Math.random() > 0.6) {
+        toDiscard.push(index);
+      }
+    });
+    
+    // Limitar a máximo 3 cartas
+    return toDiscard.slice(0, 3);
+  }
+
+  selectCard(cardIndex: number): void {
+    const selectedCards = [...this.state.selectedCards];
+    const index = selectedCards.indexOf(cardIndex);
+    
+    if (index === -1) {
+      selectedCards.push(cardIndex);
+    } else {
+      selectedCards.splice(index, 1);
+    }
+    
+    this.state.selectedCards = selectedCards;
+  }
+
+  confirmDiscard(): void {
+    const userPlayer = this.state.players.find(p => !p.isBot);
+    if (!userPlayer) return;
+    
+    this.processDiscard(userPlayer.id, this.state.selectedCards);
+    this.state.selectedCards = [];
   }
 
   private finishMusPhase(): void {
