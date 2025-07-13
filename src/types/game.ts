@@ -70,6 +70,7 @@ export interface GameState {
   adentro: boolean; // Cuando una pareja está cerca de ganar
   showingCards?: boolean; // Para mostrar cartas al final del órdago
   gameEnded?: boolean; // Fin del torneo de 3 vacas
+  selectedCards: number[]; // Para el sistema de descarte
 }
 
 export interface BetAction {

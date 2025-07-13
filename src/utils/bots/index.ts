@@ -90,89 +90,115 @@ export class MusBot {
     handValue = this.personalityModifiers.applyBluff(handValue);
     handValue = this.personalityModifiers.applyThinking(handValue);
     
-    // Personalidades específicas con mayor variabilidad
+    // Sistema de probabilidades basado en estadísticas
+    const faroleoLevel = stats.faroleo / 10; // 0-1
+    const osadiaLevel = stats.osadia / 10; // 0-1
+    const suerte = Math.random(); // Factor aleatorio
+    
+    // Personalidades específicas con probabilidades más realistas
     if (this.player.name === 'Pato') {
-      // Pato es completamente aleatorio
-      const randomChoice = Math.random();
-      if (randomChoice < 0.4) return { type: 'paso', playerId: this.player.id };
-      if (randomChoice < 0.7) return { type: 'envido', playerId: this.player.id, amount: 2 };
+      // Pato: Muy aleatorio, 35% paso, 40% envido, 25% órdago
+      const choice = Math.random();
+      if (choice < 0.35) return { type: 'paso', playerId: this.player.id };
+      if (choice < 0.75) return { type: 'envido', playerId: this.player.id, amount: 2 };
       return { type: 'ordago', playerId: this.player.id };
     }
     
     if (this.player.name === 'Vasco') {
-      // Vasco ama el órdago pero no siempre
-      if (stats.osadia >= 8 && handValue > 4 && Math.random() < 0.4) {
+      // Vasco: Alto faroleo (12% órdago, 36% envido, 52% paso)
+      if (handValue > 6 && suerte < 0.12) {
         return { type: 'ordago', playerId: this.player.id };
       }
-      if (handValue > 5 && Math.random() < 0.6) {
+      if (handValue > 4 && suerte < 0.48) { // 36% adicional
         return { type: 'envido', playerId: this.player.id, amount: 2 };
       }
+      return { type: 'paso', playerId: this.player.id };
     }
     
     if (this.player.name === 'La Zaray') {
-      // La Zaray farolea mucho
-      if (stats.faroleo >= 7 && Math.random() < 0.4) {
-        handValue += 3; // Faroleo boost
-      }
-      if (handValue > 6 && Math.random() < 0.3) {
+      // La Zaray: Muy farolera (15% órdago, 45% envido, 40% paso)
+      const bluffBoost = faroleoLevel > 0.7 ? 2 : 0;
+      if ((handValue + bluffBoost) > 5 && suerte < 0.15) {
         return { type: 'ordago', playerId: this.player.id };
       }
+      if ((handValue + bluffBoost) > 3 && suerte < 0.60) { // 45% adicional
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+      return { type: 'paso', playerId: this.player.id };
     }
     
     if (this.player.name === 'Judío') {
-      // El Judío es calculador pero optimista
-      if (handValue > 5 && Math.random() < 0.7) {
-        return { type: 'envido', playerId: this.player.id, amount: 2 };
-      }
-      if (handValue > 7 && Math.random() < 0.3) {
+      // Judío: Calculador (8% órdago, 42% envido, 50% paso)
+      if (handValue > 7 && suerte < 0.08) {
         return { type: 'ordago', playerId: this.player.id };
       }
+      if (handValue > 5 && suerte < 0.50) { // 42% adicional
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+      return { type: 'paso', playerId: this.player.id };
     }
     
     if (this.player.name === 'Chigga') {
-      // Chigga es agresivo pero inconsistente
-      if (handValue > 3 && Math.random() < 0.5) {
-        const aggressive = Math.random() < 0.6;
-        return aggressive 
-          ? { type: 'ordago', playerId: this.player.id }
-          : { type: 'envido', playerId: this.player.id, amount: 2 };
+      // Chigga: Agresivo (18% órdago, 32% envido, 50% paso)
+      if (handValue > 4 && suerte < 0.18) {
+        return { type: 'ordago', playerId: this.player.id };
       }
+      if (handValue > 3 && suerte < 0.50) { // 32% adicional
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+      return { type: 'paso', playerId: this.player.id };
     }
     
     if (this.player.name === 'Xosé Roberto') {
-      // Xosé Roberto es muy prudente
-      if (handValue < 4) {
-        return { type: 'paso', playerId: this.player.id };
+      // Xosé Roberto: Muy prudente (5% órdago, 25% envido, 70% paso)
+      if (handValue > 8 && suerte < 0.05) {
+        return { type: 'ordago', playerId: this.player.id };
       }
-      if (handValue > 7 && Math.random() < 0.8) {
+      if (handValue > 6 && suerte < 0.30) { // 25% adicional
         return { type: 'envido', playerId: this.player.id, amount: 2 };
       }
+      return { type: 'paso', playerId: this.player.id };
     }
     
     if (this.player.name === 'Duende Verde') {
-      // Duende Verde es misterioso y cambiante
+      // Duende Verde: Variable según su "humor" (10% órdago, 35% envido, 55% paso)
       const mood = Math.random();
-      if (mood < 0.3) {
-        // Conservador
-        return handValue > 6 ? { type: 'envido', playerId: this.player.id, amount: 2 } : { type: 'paso', playerId: this.player.id };
-      } else if (mood < 0.7) {
-        // Normal
-        if (handValue > 5) return { type: 'envido', playerId: this.player.id, amount: 2 };
-      } else {
-        // Agresivo
-        if (handValue > 4) return { type: 'ordago', playerId: this.player.id };
+      let ordagoChance = 0.10;
+      let envidoChance = 0.35;
+      
+      if (mood < 0.3) { // Humor conservador
+        ordagoChance = 0.05;
+        envidoChance = 0.20;
+      } else if (mood > 0.7) { // Humor agresivo
+        ordagoChance = 0.20;
+        envidoChance = 0.50;
       }
+      
+      if (handValue > 5 && suerte < ordagoChance) {
+        return { type: 'ordago', playerId: this.player.id };
+      }
+      if (handValue > 4 && suerte < (ordagoChance + envidoChance)) {
+        return { type: 'envido', playerId: this.player.id, amount: 2 };
+      }
+      return { type: 'paso', playerId: this.player.id };
     }
     
-    // Lógica general con más variabilidad
-    const randomFactor = (Math.random() - 0.5) * 3; // ±1.5 points
-    const adjustedValue = handValue + randomFactor;
+    // Lógica general basada en estadísticas
+    let ordagoChance = (osadiaLevel * 0.15) + (faroleoLevel * 0.10);
+    let envidoChance = 0.35 + (osadiaLevel * 0.10);
     
-    if (adjustedValue >= 9 && Math.random() < 0.7) {
+    // Ajustar según calidad de la mano
+    if (handValue < 3) {
+      ordagoChance *= 0.2;
+      envidoChance *= 0.3;
+    } else if (handValue > 7) {
+      ordagoChance *= 2;
+      envidoChance *= 1.5;
+    }
+    
+    if (suerte < ordagoChance && handValue > 4) {
       return { type: 'ordago', playerId: this.player.id };
-    } else if (adjustedValue >= 6 && Math.random() < 0.8) {
-      return { type: 'envido', playerId: this.player.id, amount: 2 };
-    } else if (adjustedValue >= 3 && Math.random() < 0.5) {
+    } else if (suerte < (ordagoChance + envidoChance) && handValue > 2) {
       return { type: 'envido', playerId: this.player.id, amount: 2 };
     } else {
       return { type: 'paso', playerId: this.player.id };

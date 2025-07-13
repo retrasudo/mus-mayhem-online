@@ -107,11 +107,17 @@ const GameTable = () => {
   const handleCardSelection = (selectedIndices: number[]) => {
     if (!gameEngine || !gameState) return;
     
-    const userGamePlayer = gameState.players.find(p => !p.isBot);
-    if (userGamePlayer) {
-      gameEngine.discardCards(userGamePlayer.id, selectedIndices);
+    if (gameState.subPhase === 'discarding' && selectedIndices.length === 1) {
+      gameEngine.selectCard(selectedIndices[0]);
       setGameState({ ...gameEngine.getState() });
     }
+  };
+
+  const handleConfirmDiscard = () => {
+    if (!gameEngine || !gameState) return;
+    
+    gameEngine.confirmDiscard();
+    setGameState({ ...gameEngine.getState() });
   };
 
   if (showCharacterSelection) {
@@ -341,15 +347,28 @@ const GameTable = () => {
             </div>
           </div>
 
-          {/* User's Hand - Más compacto y sin solapar */}
+          {/* User's Hand - Movido más hacia la derecha */}
           {userGamePlayer && (
-            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-20">
+            <div className="absolute bottom-20 right-4 z-20">
               <CardHand 
                 hand={userGamePlayer.hand}
                 gamePhase={gameState.subPhase}
                 onCardSelection={handleCardSelection}
                 showCards={gameState.showingCards}
               />
+              
+              {/* Botón de descarte cuando es necesario */}
+              {gameState.subPhase === 'discarding' && isUserTurn && gameState.selectedCards.length > 0 && (
+                <div className="mt-2 text-center">
+                  <Button 
+                    size="sm"
+                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                    onClick={handleConfirmDiscard}
+                  >
+                    Descartar {gameState.selectedCards.length} carta{gameState.selectedCards.length !== 1 ? 's' : ''}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
