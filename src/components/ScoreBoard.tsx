@@ -11,11 +11,11 @@ interface ScoreBoardProps {
 }
 
 const ScoreBoard: React.FC<ScoreBoardProps> = ({ teamAScore, teamBScore, pot }) => {
-  const maxScore = 30;
+  const maxScore = 40;
   
   const getScoreColor = (score: number) => {
-    if (score >= 25) return 'text-red-600';
-    if (score >= 20) return 'text-yellow-600';
+    if (score >= 35) return 'text-red-600';
+    if (score >= 25) return 'text-yellow-600';
     return 'text-green-600';
   };
 
@@ -31,7 +31,7 @@ const ScoreBoard: React.FC<ScoreBoardProps> = ({ teamAScore, teamBScore, pot }) 
           <div className={`text-3xl font-bold ${getScoreColor(teamAScore)}`}>
             {teamAScore}
           </div>
-          <div className="text-xs text-gray-600">piedras</div>
+          <div className="text-xs text-gray-600">puntos</div>
         </div>
 
         {/* Center Pot */}
@@ -51,7 +51,7 @@ const ScoreBoard: React.FC<ScoreBoardProps> = ({ teamAScore, teamBScore, pot }) 
           <div className={`text-3xl font-bold ${getScoreColor(teamBScore)}`}>
             {teamBScore}
           </div>
-          <div className="text-xs text-gray-600">piedras</div>
+          <div className="text-xs text-gray-600">puntos</div>
         </div>
       </div>
       

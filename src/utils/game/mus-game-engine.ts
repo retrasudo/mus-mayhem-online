@@ -81,6 +81,7 @@ export class MusGameEngine {
       player.hasPares = CardEvaluator.checkPares(player.hand);
       player.hasJuego = CardEvaluator.checkJuego(player.hand);
       player.punto = CardEvaluator.calculatePunto(player.hand);
+      player.hasDiscarded = false;
     });
     
     this.state.phase = 'mus';
@@ -114,46 +115,24 @@ export class MusGameEngine {
 
   // Métodos para reiniciar el torneo o juego
   resetTournament(): void {
+    this.state.teamAScore = 0;
+    this.state.teamBScore = 0;
     this.state.teamAVacas = 0;
     this.state.teamBVacas = 0;
-    this.resetGame();
+    this.state.teamAAmarracos = 0;
+    this.state.teamBAmarracos = 0;
+    this.state.gameEnded = false;
+    this.dealNewRound();
   }
 
   resetToNewGame(): void {
-    this.resetGame();
-  }
-
-  // Método para reiniciar completamente el juego (para rematch)
-  resetGame(): void {
-    // Reiniciar puntuaciones pero mantener vacas del ganador
-    const winningTeam = this.state.teamAVacas > this.state.teamBVacas ? 'A' : 'B';
-    
+    // Reiniciar puntos pero mantener vacas para revancha
     this.state.teamAScore = 0;
     this.state.teamBScore = 0;
     this.state.teamAAmarracos = 0;
     this.state.teamBAmarracos = 0;
-    
-    // Añadir una vaca al equipo ganador
-    if (winningTeam === 'A') {
-      this.state.teamAVacas++;
-    } else {
-      this.state.teamBVacas++;
-    }
-    
-    this.state.currentRound = 1;
-    this.state.roundResults = [];
-    this.state.dialogues = [];
     this.state.gameEnded = false;
-    
-    // Verificar si algún equipo ha ganado el torneo (3 vacas)
-    if (this.state.teamAVacas >= 3 || this.state.teamBVacas >= 3) {
-      this.state.gameEnded = true;
-      const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
-      this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
-    } else {
-      // Iniciar nueva partida
-      this.dealNewRound();
-    }
+    this.dealNewRound();
   }
 
   processMusDecision(playerId: string, decision: 'mus' | 'no-mus'): void {
@@ -350,8 +329,8 @@ export class MusGameEngine {
     this.state.waitingForResponse = false;
     
     if (this.state.currentBetType === 'ordago') {
-      // Órdago aceptado - resolver inmediatamente
-      this.resolveOrdago();
+      // Órdago aceptado - finalizar partida inmediatamente
+      this.resolveOrdagoFinal();
     } else {
       // Envido aceptado - resolver fase y continuar
       this.resolvePhase();
@@ -359,42 +338,100 @@ export class MusGameEngine {
   }
 
   private handleNoQuiero(): void {
-    this.state.waitingForResponse = false;
-    
+    // Contar cuántos jugadores del equipo contrario han dicho "no quiero"
+    const currentPlayerId = this.state.currentPlayer;
+    const currentPlayer = this.state.players.find(p => p.id === currentPlayerId);
     const betPlayer = this.state.players.find(p => p.id === this.state.lastBetPlayer);
-    if (betPlayer) {
-      this.addPoints(betPlayer.team, 1, 'deje');
+    
+    if (!currentPlayer || !betPlayer) return;
+    
+    // Obtener equipo que apostó y equipo que responde
+    const bettingTeam = betPlayer.team;
+    const respondingTeam = currentPlayer.team;
+    const respondingTeamPlayers = this.state.players.filter(p => p.team === respondingTeam);
+    
+    // Verificar si ambos jugadores del equipo han rechazado
+    const noQuieroCount = respondingTeamPlayers.filter(p => 
+      this.state.bets[p.id]?.type === 'no-quiero'
+    ).length;
+    
+    // Si solo uno ha dicho no-quiero, pasar al compañero
+    if (noQuieroCount < 2) {
+      const nextTeammate = respondingTeamPlayers.find(p => 
+        p.id !== currentPlayerId && !this.state.bets[p.id]
+      );
+      if (nextTeammate) {
+        this.state.currentPlayer = nextTeammate.id;
+        return;
+      }
     }
+    
+    // Si ambos han dicho no-quiero, otorgar deje al equipo apostador
+    this.state.waitingForResponse = false;
+    this.addPoints(bettingTeam, 1, 'deje');
     
     this.state.currentBet = 0;
     this.state.currentBetType = null;
     this.nextPhase();
   }
 
-  private resolveOrdago(): void {
-    // Determinar ganador del órdago inmediatamente
-    const winner = this.determinePhaseWinner();
+  private resolveOrdagoFinal(): void {
+    // Determinar ganador del órdago por mejor mano general
+    const winner = this.determineOrdagoWinner();
     if (winner) {
-      // El ganador del órdago gana toda la partida (1 vaca)
-      if (winner === 'A') {
-        this.state.teamAVacas++;
-      } else {
-        this.state.teamBVacas++;
-      }
+      // El ganador del órdago gana toda la partida (40 puntos)
+      this.addPoints(winner, 40, 'órdago querido');
       
-      this.addDialogue('system', `¡Equipo ${winner} gana la vaca por órdago!`, 'game-end');
+      this.addDialogue('system', `¡Equipo ${winner} gana por órdago!`, 'game-end');
       
-      // Verificar si algún equipo ha ganado el torneo (3 vacas)
-      if (this.state.teamAVacas >= 3 || this.state.teamBVacas >= 3) {
-        this.state.gameEnded = true;
-        const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
-        this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
-      }
-      
-      // Finalizar inmediatamente
+      // Finalizar partida inmediatamente
       this.state.phase = 'finished';
-      this.state.subPhase = 'ordago-resolved';
+      this.state.gameEnded = true;
     }
+  }
+
+  private determineOrdagoWinner(): 'A' | 'B' | null {
+    const teamAPlayers = this.state.players.filter(p => p.team === 'A');
+    const teamBPlayers = this.state.players.filter(p => p.team === 'B');
+    
+    // Evaluar mejor mano de cada equipo considerando todas las modalidades
+    let teamABest = 0;
+    let teamBBest = 0;
+    
+    // Prioridad: Juego > Pares > Grande > Chica > Punto
+    for (const player of teamAPlayers) {
+      const handValue = this.calculateHandValue(player);
+      if (handValue > teamABest) teamABest = handValue;
+    }
+    
+    for (const player of teamBPlayers) {
+      const handValue = this.calculateHandValue(player);
+      if (handValue > teamBBest) teamBBest = handValue;
+    }
+    
+    if (teamABest > teamBBest) return 'A';
+    if (teamBBest > teamABest) return 'B';
+    return null;
+  }
+
+  private calculateHandValue(player: Player): number {
+    let value = 0;
+    
+    // Juego (máxima prioridad): 10000 + valor del juego
+    if (player.hasJuego) {
+      value += 10000 + CardEvaluator.evaluateJuegoValue(player.hand);
+    }
+    // Pares: 5000 + valor de los pares
+    else if (player.hasPares) {
+      value += 5000 + CardEvaluator.evaluateParesValue(player.hand);
+    }
+    // Solo cartas altas: grande + punto
+    else {
+      const grande = Math.max(...player.hand.map(c => c.musValue));
+      value += grande * 100 + (player.punto || 0);
+    }
+    
+    return value;
   }
 
   private checkAllPassed(): boolean {
@@ -477,22 +514,31 @@ export class MusGameEngine {
       this.state.teamBScore += points;
     }
     
-    this.addDialogue('system', `Equipo ${team} gana ${points} piedra${points !== 1 ? 's' : ''} (${reason})`, 'scoring');
+    this.addDialogue('system', `Equipo ${team} gana ${points} punto${points !== 1 ? 's' : ''} (${reason})`, 'scoring');
     
-    // Convertir a amarracos
-    this.convertToAmarracos();
+    // Verificar fin de partida por 40 puntos
+    if (this.state.teamAScore >= 40 || this.state.teamBScore >= 40) {
+      const winner = this.state.teamAScore >= 40 ? 'A' : 'B';
+      if (winner === 'A') {
+        this.state.teamAVacas++;
+      } else {
+        this.state.teamBVacas++;
+      }
+      
+      this.addDialogue('system', `¡Equipo ${winner} gana la partida con 40 puntos!`, 'game-end');
+      
+      // Verificar si algún equipo ha ganado el torneo (3 vacas)
+      if (this.state.teamAVacas >= 3 || this.state.teamBVacas >= 3) {
+        this.state.gameEnded = true;
+        const tournamentWinner = this.state.teamAVacas >= 3 ? 'A' : 'B';
+        this.addDialogue('system', `¡Equipo ${tournamentWinner} gana el torneo ${this.state.teamAVacas}-${this.state.teamBVacas}!`, 'tournament-end');
+      }
+      
+      this.state.phase = 'finished';
+    }
   }
 
-  private convertToAmarracos(): void {
-    if (this.state.teamAScore >= 5) {
-      this.state.teamAAmarracos += Math.floor(this.state.teamAScore / 5);
-      this.state.teamAScore = this.state.teamAScore % 5;
-    }
-    if (this.state.teamBScore >= 5) {
-      this.state.teamBAmarracos += Math.floor(this.state.teamBScore / 5);
-      this.state.teamBScore = this.state.teamBScore % 5;
-    }
-  }
+  // Removed amarracos system - now using simple points to 40
 
   private nextPhase(): void {
     this.state.bets = {};
@@ -552,32 +598,44 @@ export class MusGameEngine {
   private announcePlayersWithPares(): void {
     this.state.players.forEach(player => {
       if (player.hasPares) {
-        this.addDialogue(player.id, '¡Pares!', 'announce-pares');
+        this.addDialogue(player.id, 'Pares Sí', 'announce-pares');
       } else {
-        this.addDialogue(player.id, 'No hay pares', 'announce-no-pares');
+        this.addDialogue(player.id, 'Pares No', 'announce-no-pares');
       }
     });
     
     // Después de anunciar, empezar apuestas solo con los que tienen pares
     setTimeout(() => {
-      this.state.subPhase = 'betting';
-      this.resetCurrentPlayer();
+      if (this.state.players.some(p => p.hasPares)) {
+        this.state.subPhase = 'betting';
+        this.resetCurrentPlayer();
+      } else {
+        // Si nadie tiene pares, saltar a juego
+        this.skipToJuego();
+      }
     }, 2000);
   }
 
   private announcePlayersWithJuego(): void {
     this.state.players.forEach(player => {
       if (player.hasJuego) {
-        this.addDialogue(player.id, '¡Juego!', 'announce-juego');
+        this.addDialogue(player.id, 'Juego Sí', 'announce-juego');
       } else {
-        this.addDialogue(player.id, 'No hay juego', 'announce-no-juego');
+        this.addDialogue(player.id, 'Juego No', 'announce-no-juego');
       }
     });
     
     // Después de anunciar, empezar apuestas solo con los que tienen juego
     setTimeout(() => {
-      this.state.subPhase = 'betting';
-      this.resetCurrentPlayer();
+      if (this.state.players.some(p => p.hasJuego)) {
+        this.state.subPhase = 'betting';
+        this.resetCurrentPlayer();
+      } else {
+        // Si nadie tiene juego, ir al punto
+        this.state.phase = 'punto';
+        this.state.subPhase = 'betting';
+        this.resetCurrentPlayer();
+      }
     }, 2000);
   }
 
@@ -585,9 +643,9 @@ export class MusGameEngine {
     this.state.phase = 'scoring';
     this.state.subPhase = 'next-round';
     
-    // Verificar si algún equipo ha ganado la partida
-    if (this.state.teamAAmarracos >= 3 || this.state.teamBAmarracos >= 3) {
-      const winner = this.state.teamAAmarracos >= 3 ? 'A' : 'B';
+    // Verificar si algún equipo ha ganado la partida (40 puntos)
+    if (this.state.teamAScore >= 40 || this.state.teamBScore >= 40) {
+      const winner = this.state.teamAScore >= 40 ? 'A' : 'B';
       if (winner === 'A') {
         this.state.teamAVacas++;
       } else {
@@ -643,4 +701,5 @@ export class MusGameEngine {
     const nextIndex = (currentIndex + 1) % activePlayers.length;
     this.state.currentPlayer = activePlayers[nextIndex].id;
   }
+
 }

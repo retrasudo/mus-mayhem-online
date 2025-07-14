@@ -187,14 +187,14 @@ const GameTable = () => {
                   <div className="text-center">
                     <div className="w-2 h-2 bg-blue-500 rounded-full mx-auto mb-0.5"></div>
                     <div className="font-bold text-xs leading-tight">Equipo A</div>
+                    <div className="text-xs leading-none">{gameState.teamAScore}/40 pts</div>
                     <div className="text-xs leading-none">{gameState.teamAVacas} vacas</div>
-                    <div className="text-xs leading-none">{gameState.teamAAmarracos} amarracos</div>
                   </div>
                   <div className="text-center">
                     <div className="w-2 h-2 bg-red-500 rounded-full mx-auto mb-0.5"></div>
                     <div className="font-bold text-xs leading-tight">Equipo B</div>
+                    <div className="text-xs leading-none">{gameState.teamBScore}/40 pts</div>
                     <div className="text-xs leading-none">{gameState.teamBVacas} vacas</div>
-                    <div className="text-xs leading-none">{gameState.teamBAmarracos} amarracos</div>
                   </div>
                 </div>
               </div>
@@ -332,7 +332,7 @@ const GameTable = () => {
                 </div>
                 {gameState.currentBet > 0 && (
                   <div className="text-sm font-semibold text-yellow-200">
-                    💰 {gameState.currentBet} piedras
+                    💰 {gameState.currentBet} puntos
                   </div>
                 )}
                 {gameState.waitingForResponse && (
@@ -344,16 +344,15 @@ const GameTable = () => {
             </div>
           </div>
 
-          {/* User's Hand - Movido más hacia la derecha */}
+          {/* User's Hand - Moved further right to avoid overlap */}
           {userGamePlayer && (
-            <div className="absolute bottom-20 right-4 z-20">
+            <div className="absolute bottom-20 right-8 z-20">
               <CardHand 
                 hand={userGamePlayer.hand}
                 gamePhase={gameState.subPhase}
                 onCardSelection={handleCardSelection}
                 showCards={gameState.showingCards}
               />
-              
             </div>
           )}
 
@@ -437,19 +436,6 @@ const GameTable = () => {
             </div>
           )}
 
-          {/* Showing Cards Message */}
-          {gameState.showingCards && (
-            <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 z-30">
-              <Card className="bg-yellow-500/90 backdrop-blur-sm p-4 text-center">
-                <div className="text-lg font-bold text-black">
-                  📋 Mostrando cartas...
-                </div>
-                <div className="text-sm text-black/80 mt-1">
-                  Determinando ganador del órdago
-                </div>
-              </Card>
-            </div>
-          )}
 
           {/* Signals Panel - Más compacto */}
           {gameState.senasEnabled && !isUserTurn && userGamePlayer && gameState.phase !== 'finished' && (
@@ -527,10 +513,10 @@ const GameTable = () => {
             ) : (
               <>
                 <h2 className="text-xl font-bold mb-3">
-                  🎯 {gameState.teamAAmarracos >= 8 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
+                  🎯 {gameState.teamAScore >= 40 ? '¡Equipo A Gana!' : '¡Equipo B Gana!'}
                 </h2>
                 <div className="text-sm mb-3">
-                  Amarracos: {gameState.teamAAmarracos} - {gameState.teamBAmarracos}
+                  Puntos: {gameState.teamAScore} - {gameState.teamBScore}
                 </div>
                 <div className="text-sm mb-3">
                   Vacas: {gameState.teamAVacas} - {gameState.teamBVacas}
